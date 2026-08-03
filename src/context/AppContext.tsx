@@ -204,6 +204,19 @@ const initialCashflows: Cashflow[] = [
   { id: 'cf4', transactionDate: '2026-07-14', transactionType: 'Pengeluaran', categoryId: 'c4', description: 'Biaya Admin Bank Transfer', amount: 6500, note: 'Biaya admin' }
 ];
 
+// Helper to generate UUID with mobile fallback
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Math.random fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -215,7 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
-    const id = crypto.randomUUID();
+    const id = generateUUID();
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       removeToast(id);
@@ -408,7 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Vendor actions
   const addVendor = (vendor: Omit<Vendor, 'id'>): Vendor => {
-    const newId = crypto.randomUUID();
+    const newId = generateUUID();
     const newVendor = { ...vendor, id: newId };
     const updated = [...vendors, newVendor];
     setVendors(updated);
@@ -474,7 +487,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Category actions
   const addCategory = (category: Omit<Category, 'id'>): Category => {
-    const newId = 'c_' + crypto.randomUUID();
+    const newId = 'c_' + generateUUID();
     const newCategory = { ...category, id: newId };
     const updated = [...categories, newCategory];
     setCategories(updated);
@@ -538,7 +551,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // SubCategory actions
   const addSubCategory = (sub: Omit<SubCategory, 'id'>): SubCategory => {
-    const newId = 'sc_' + crypto.randomUUID();
+    const newId = 'sc_' + generateUUID();
     const newSub = { ...sub, id: newId };
     const updated = [...subCategories, newSub];
     setSubCategories(updated);
@@ -597,7 +610,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (material.quantityReceived > 0 && material.quantityReceived < material.quantityRequested) {
       status = 'Partial';
     }
-    const newId = crypto.randomUUID();
+    const newId = generateUUID();
     const newMat = { ...material, id: newId, status };
     const updated = [...materials, newMat];
     setMaterials(updated);
@@ -686,7 +699,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Invoice & Payments
   const addInvoice = (invoice: Omit<Invoice, 'id'>) => {
-    const newId = crypto.randomUUID();
+    const newId = generateUUID();
     const newInv = { 
       ...invoice, 
       id: newId,
@@ -773,7 +786,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addPayment = (payment: Omit<Payment, 'id'>) => {
-    const newId = crypto.randomUUID();
+    const newId = generateUUID();
     const newPayment = { ...payment, id: newId };
     const updated = [...payments, newPayment];
     setPayments(updated);
@@ -827,7 +840,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Cashflow
   const addCashflow = (cashflow: Omit<Cashflow, 'id' | 'runningBalance'> & { rowIndex?: number }) => {
-    const newId = crypto.randomUUID();
+    const newId = generateUUID();
     const nextRowIndex = cashflow.rowIndex !== undefined 
       ? cashflow.rowIndex 
       : (cashflows.length > 0 ? Math.max(...cashflows.map(cf => cf.rowIndex || 0)) + 1 : 1);
@@ -873,7 +886,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextIndex = cf.rowIndex !== undefined ? cf.rowIndex : baseRowIndex + index + 1;
       return {
         ...cf,
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now() + index,
         rowIndex: nextIndex
       };
@@ -1041,7 +1054,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(oldId);
               if (isValidUUID) return oldId;
               if (idMap.has(oldId)) return idMap.get(oldId)!;
-              const newUUID = crypto.randomUUID();
+              const newUUID = generateUUID();
               idMap.set(oldId, newUUID);
               return newUUID;
             };
