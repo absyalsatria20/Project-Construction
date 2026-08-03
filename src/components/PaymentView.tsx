@@ -375,12 +375,24 @@ export const PaymentView: React.FC = () => {
       result = result.filter(inv => inv.invoiceDate <= dateFilterEnd);
     }
 
-    // Sort: ALWAYS sort by createdAt descending so new items appear first
+    // Sort
     result.sort((a, b) => {
-      const timeA = a.createdAt || 0;
-      const timeB = b.createdAt || 0;
-      if (timeA !== timeB) return timeB - timeA;
-      return b.id.localeCompare(a.id);
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      // Handle undefined / fallback
+      if (aVal === undefined) aVal = '';
+      if (bVal === undefined) bVal = '';
+
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' 
+          ? aVal.localeCompare(bVal) 
+          : bVal.localeCompare(aVal);
+      } else {
+        return sortDirection === 'asc'
+          ? (aVal as number) - (bVal as number)
+          : (bVal as number) - (aVal as number);
+      }
     });
 
     return result;
