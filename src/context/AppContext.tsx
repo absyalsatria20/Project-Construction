@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/utils/supabase';
 
 // Interfaces
 export interface Vendor {
@@ -231,7 +232,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ username: string }>({ username: 'admin' });
 
-  // Load from LocalStorage
+  // Sync Supabase Helper Functions
+  const fetchSupabaseData = async () => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    try {
+      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes] = await Promise.all([
+        supabase.from('vendors').select('*').order('name'),
+        supabase.from('categories').select('*').order('name'),
+        supabase.from('subcategories').select('*').order('name'),
+        supabase.from('materials').select('*').order('item_name'),
+        supabase.from('invoices').select('*'),
+        supabase.from('payments').select('*'),
+        supabase.from('cashflows').select('*')
+      ]);
+
+      if (vRes.data) setVendors(vRes.data);
+      if (cRes.data) setCategories(cRes.data);
+      if (scRes.data) setSubCategories(scRes.data);
+      if (mRes.data) {
+        setMaterials(mRes.data.map((m) => ({
+          id: m.id,
+          itemName: m.item_name,
+          unit: m.unit,
+          quantityRequested: Number(m.quantity_requested),
+          quantityReceived: Number(m.quantity_received),
+          receiveDate: m.receive_date || '',
+          status: m.status as 'Complete' | 'Partial' | 'Waiting',
+          verification: m.verification,
+          note: m.note || ''
+        })));
+      }
+      if (iRes.data) {
+        setInvoices(iRes.data.map((i) => ({
+          id: i.id,
+          vendorId: i.vendor_id,
+          invoiceNumber: i.invoice_number,
+          invoiceDate: i.invoice_date,
+          description: i.description || '',
+          totalInvoice: Number(i.total_invoice),
+          termin: i.termin,
+          createdAt: new Date(i.created_at).getTime()
+        })));
+      }
+      if (pRes.data) {
+        setPayments(pRes.data.map((p) => ({
+          id: p.id,
+          invoiceId: p.invoice_id,
+          paymentDate: p.payment_date,
+          amount: Number(p.amount),
+          paymentNote: p.payment_note || ''
+        })));
+      }
+      if (cfRes.data) {
+        setCashflows(cfRes.data.map((cf) => ({
+          id: cf.id,
+          transactionDate: cf.transaction_date,
+          transactionType: cf.transaction_type as 'Dana Masuk' | 'Pengeluaran',
+          categoryId: cf.category_id || undefined,
+          subcategoryId: cf.subcategory_id || undefined,
+          vendorId: cf.vendor_id || undefined,
+          description: cf.description,
+          amount: Number(cf.amount),
+          note: cf.note || '',
+          createdAt: new Date(cf.created_at).getTime()
+        })));
+      }
+    } catch (err) {
+      console.error("Error fetching from Supabase", err);
+    }
+  };
+
+  // Load from LocalStorage or Supabase
   useEffect(() => {
     const authStatus = localStorage.getItem('cpms_auth');
     if (authStatus === 'true') {
@@ -240,37 +311,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const localUsername = localStorage.getItem('cpms_user_username') || 'admin';
     setCurrentUser({ username: localUsername });
 
-    const localVendors = localStorage.getItem('cpms_vendors');
-    const localCategories = localStorage.getItem('cpms_categories');
-    const localSubCategories = localStorage.getItem('cpms_subcategories');
-    const localMaterials = localStorage.getItem('cpms_materials');
-    const localInvoices = localStorage.getItem('cpms_invoices');
-    const localPayments = localStorage.getItem('cpms_payments');
-    const localCashflows = localStorage.getItem('cpms_cashflows');
     const localItemsPerPage = localStorage.getItem('cpms_items_per_page');
-
-    if (localVendors) setVendors(JSON.parse(localVendors));
-    else setVendors(initialVendors);
-
-    if (localCategories) setCategories(JSON.parse(localCategories));
-    else setCategories(initialCategories);
-
-    if (localSubCategories) setSubCategories(JSON.parse(localSubCategories));
-    else setSubCategories(initialSubCategories);
-
-    if (localMaterials) setMaterials(JSON.parse(localMaterials));
-    else setMaterials(initialMaterials);
-
-    if (localInvoices) setInvoices(JSON.parse(localInvoices));
-    else setInvoices(initialInvoices);
-
-    if (localPayments) setPayments(JSON.parse(localPayments));
-    else setPayments(initialPayments);
-
-    if (localCashflows) setCashflows(JSON.parse(localCashflows));
-    else setCashflows(initialCashflows);
-
     if (localItemsPerPage) setItemsPerPageState(Number(localItemsPerPage));
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      fetchSupabaseData();
+    } else {
+      const localVendors = localStorage.getItem('cpms_vendors');
+      const localCategories = localStorage.getItem('cpms_categories');
+      const localSubCategories = localStorage.getItem('cpms_subcategories');
+      const localMaterials = localStorage.getItem('cpms_materials');
+      const localInvoices = localStorage.getItem('cpms_invoices');
+      const localPayments = localStorage.getItem('cpms_payments');
+      const localCashflows = localStorage.getItem('cpms_cashflows');
+
+      if (localVendors) setVendors(JSON.parse(localVendors));
+      else setVendors(initialVendors);
+
+      if (localCategories) setCategories(JSON.parse(localCategories));
+      else setCategories(initialCategories);
+
+      if (localSubCategories) setSubCategories(JSON.parse(localSubCategories));
+      else setSubCategories(initialSubCategories);
+
+      if (localMaterials) setMaterials(JSON.parse(localMaterials));
+      else setMaterials(initialMaterials);
+
+      if (localInvoices) setInvoices(JSON.parse(localInvoices));
+      else setInvoices(initialInvoices);
+
+      if (localPayments) setPayments(JSON.parse(localPayments));
+      else setPayments(initialPayments);
+
+      if (localCashflows) setCashflows(JSON.parse(localCashflows));
+      else setCashflows(initialCashflows);
+    }
   }, []);
 
   const setItemsPerPage = (val: number) => {
@@ -311,10 +386,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Vendor actions
   const addVendor = (vendor: Omit<Vendor, 'id'>): Vendor => {
-    const newVendor = { ...vendor, id: 'v_' + crypto.randomUUID() };
+    const newId = crypto.randomUUID();
+    const newVendor = { ...vendor, id: newId };
     const updated = [...vendors, newVendor];
     setVendors(updated);
-    save('cpms_vendors', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('vendors').insert([{
+        id: newId,
+        name: vendor.name,
+        address: vendor.address,
+        pic: vendor.pic,
+        phone: vendor.phone,
+        bank: vendor.bank,
+        account_number: vendor.accountNumber
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert vendor error", error);
+      });
+    } else {
+      save('cpms_vendors', updated);
+    }
     showToast('success', 'Vendor berhasil ditambahkan');
     return newVendor;
   };
@@ -322,31 +412,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateVendor = (id: string, vendor: Partial<Vendor>) => {
     const updated = vendors.map(v => v.id === id ? { ...v, ...vendor } : v);
     setVendors(updated);
-    save('cpms_vendors', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (vendor.name !== undefined) payload.name = vendor.name;
+      if (vendor.address !== undefined) payload.address = vendor.address;
+      if (vendor.pic !== undefined) payload.pic = vendor.pic;
+      if (vendor.phone !== undefined) payload.phone = vendor.phone;
+      if (vendor.bank !== undefined) payload.bank = vendor.bank;
+      if (vendor.accountNumber !== undefined) payload.account_number = vendor.accountNumber;
+
+      supabase.from('vendors').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update vendor error", error);
+      });
+    } else {
+      save('cpms_vendors', updated);
+    }
     showToast('success', 'Vendor berhasil diperbarui');
   };
 
   const deleteVendor = (id: string): boolean => {
-    // Business Rule 1 & check invoices/cashflows
     const inUseInvoices = invoices.some(i => i.vendorId === id);
     const inUseCashflows = cashflows.some(c => c.vendorId === id);
     if (inUseInvoices || inUseCashflows) {
       showToast('error', 'Gagal menghapus! Vendor ini masih terikat dengan data Invoice atau transaksi Cashflow.');
-      return false; // Gagal hapus karena terpakai
+      return false;
     }
     const updated = vendors.filter(v => v.id !== id);
     setVendors(updated);
-    save('cpms_vendors', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('vendors').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete vendor error", error);
+      });
+    } else {
+      save('cpms_vendors', updated);
+    }
     showToast('success', 'Vendor berhasil dihapus');
     return true;
   };
 
   // Category actions
   const addCategory = (category: Omit<Category, 'id'>): Category => {
-    const newCategory = { ...category, id: 'c_' + crypto.randomUUID() };
+    const newId = 'c_' + crypto.randomUUID();
+    const newCategory = { ...category, id: newId };
     const updated = [...categories, newCategory];
     setCategories(updated);
-    save('cpms_categories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('categories').insert([{
+        id: newId,
+        name: category.name,
+        icon: category.icon,
+        color: category.color,
+        active: category.active
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert category error", error);
+      });
+    } else {
+      save('cpms_categories', updated);
+    }
     showToast('success', 'Kategori berhasil ditambahkan');
     return newCategory;
   };
@@ -354,12 +476,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateCategory = (id: string, category: Partial<Category>) => {
     const updated = categories.map(c => c.id === id ? { ...c, ...category } : c);
     setCategories(updated);
-    save('cpms_categories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (category.name !== undefined) payload.name = category.name;
+      if (category.icon !== undefined) payload.icon = category.icon;
+      if (category.color !== undefined) payload.color = category.color;
+      if (category.active !== undefined) payload.active = category.active;
+
+      supabase.from('categories').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update category error", error);
+      });
+    } else {
+      save('cpms_categories', updated);
+    }
     showToast('success', 'Kategori berhasil diperbarui');
   };
 
   const deleteCategory = (id: string): boolean => {
-    // Business Rule 1
     const inUse = cashflows.some(c => c.categoryId === id);
     if (inUse) {
       showToast('error', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Cashflow.');
@@ -369,18 +502,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedSub = subCategories.filter(sc => sc.categoryId !== id);
     setCategories(updated);
     setSubCategories(updatedSub);
-    save('cpms_categories', updated);
-    save('cpms_subcategories', updatedSub);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('categories').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete category error", error);
+      });
+    } else {
+      save('cpms_categories', updated);
+      save('cpms_subcategories', updatedSub);
+    }
     showToast('success', 'Kategori berhasil dihapus');
     return true;
   };
 
   // SubCategory actions
   const addSubCategory = (sub: Omit<SubCategory, 'id'>): SubCategory => {
-    const newSub = { ...sub, id: 'sc_' + crypto.randomUUID() };
+    const newId = 'sc_' + crypto.randomUUID();
+    const newSub = { ...sub, id: newId };
     const updated = [...subCategories, newSub];
     setSubCategories(updated);
-    save('cpms_subcategories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('subcategories').insert([{
+        id: newId,
+        category_id: sub.categoryId,
+        name: sub.name,
+        active: sub.active
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert subcategory error", error);
+      });
+    } else {
+      save('cpms_subcategories', updated);
+    }
     showToast('success', 'Sub-kategori berhasil ditambahkan');
     return newSub;
   };
@@ -388,14 +539,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSubCategory = (id: string, sub: Partial<SubCategory>) => {
     const updated = subCategories.map(s => s.id === id ? { ...s, ...sub } : s);
     setSubCategories(updated);
-    save('cpms_subcategories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (sub.categoryId !== undefined) payload.category_id = sub.categoryId;
+      if (sub.name !== undefined) payload.name = sub.name;
+      if (sub.active !== undefined) payload.active = sub.active;
+
+      supabase.from('subcategories').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update subcategory error", error);
+      });
+    } else {
+      save('cpms_subcategories', updated);
+    }
     showToast('success', 'Sub-kategori berhasil diperbarui');
   };
 
   const deleteSubCategory = (id: string) => {
     const updated = subCategories.filter(s => s.id !== id);
     setSubCategories(updated);
-    save('cpms_subcategories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('subcategories').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete subcategory error", error);
+      });
+    } else {
+      save('cpms_subcategories', updated);
+    }
     showToast('success', 'Sub-kategori berhasil dihapus');
   };
 
@@ -407,14 +575,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (material.quantityReceived > 0 && material.quantityReceived < material.quantityRequested) {
       status = 'Partial';
     }
-    const newMat = { ...material, id: 'm_' + crypto.randomUUID(), status };
+    const newId = crypto.randomUUID();
+    const newMat = { ...material, id: newId, status };
     const updated = [...materials, newMat];
     setMaterials(updated);
-    save('cpms_materials', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('materials').insert([{
+        id: newId,
+        item_name: material.itemName,
+        unit: material.unit,
+        quantity_requested: material.quantityRequested,
+        quantity_received: material.quantityReceived,
+        receive_date: material.receiveDate || null,
+        status,
+        verification: material.verification,
+        note: material.note
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert material error", error);
+      });
+    } else {
+      save('cpms_materials', updated);
+    }
     showToast('success', 'Material berhasil ditambahkan');
   };
 
   const updateMaterial = (id: string, material: Partial<Material>) => {
+    let newStatus: 'Complete' | 'Partial' | 'Waiting' | undefined;
     const updated = materials.map(m => {
       if (m.id === id) {
         const merged = { ...m, ...material };
@@ -424,39 +610,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (merged.quantityReceived > 0 && merged.quantityReceived < merged.quantityRequested) {
           status = 'Partial';
         }
+        newStatus = status;
         return { ...merged, status };
       }
       return m;
     });
     setMaterials(updated);
-    save('cpms_materials', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (material.itemName !== undefined) payload.item_name = material.itemName;
+      if (material.unit !== undefined) payload.unit = material.unit;
+      if (material.quantityRequested !== undefined) payload.quantity_requested = material.quantityRequested;
+      if (material.quantityReceived !== undefined) payload.quantity_received = material.quantityReceived;
+      if (material.receiveDate !== undefined) payload.receive_date = material.receiveDate || null;
+      if (newStatus !== undefined) payload.status = newStatus;
+      if (material.verification !== undefined) payload.verification = material.verification;
+      if (material.note !== undefined) payload.note = material.note;
+
+      supabase.from('materials').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update material error", error);
+      });
+    } else {
+      save('cpms_materials', updated);
+    }
     showToast('success', 'Material berhasil diperbarui');
   };
 
   const deleteMaterial = (id: string) => {
     const updated = materials.filter(m => m.id !== id);
     setMaterials(updated);
-    save('cpms_materials', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('materials').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete material error", error);
+      });
+    } else {
+      save('cpms_materials', updated);
+    }
     showToast('success', 'Material berhasil dihapus');
   };
 
   // Invoice & Payments
   const addInvoice = (invoice: Omit<Invoice, 'id'>) => {
+    const newId = crypto.randomUUID();
     const newInv = { 
       ...invoice, 
-      id: 'inv_' + crypto.randomUUID(),
+      id: newId,
       createdAt: Date.now()
     };
     const updated = [...invoices, newInv];
     setInvoices(updated);
-    save('cpms_invoices', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('invoices').insert([{
+        id: newId,
+        vendor_id: invoice.vendorId,
+        invoice_number: invoice.invoiceNumber,
+        invoice_date: invoice.invoiceDate,
+        description: invoice.description,
+        total_invoice: invoice.totalInvoice,
+        termin: invoice.termin
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert invoice error", error);
+      });
+    } else {
+      save('cpms_invoices', updated);
+    }
     showToast('success', 'Invoice berhasil ditambahkan');
   };
 
   const updateInvoice = (id: string, invoice: Partial<Invoice>) => {
     const updated = invoices.map(i => i.id === id ? { ...i, ...invoice } : i);
     setInvoices(updated);
-    save('cpms_invoices', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (invoice.vendorId !== undefined) payload.vendor_id = invoice.vendorId;
+      if (invoice.invoiceNumber !== undefined) payload.invoice_number = invoice.invoiceNumber;
+      if (invoice.invoiceDate !== undefined) payload.invoice_date = invoice.invoiceDate;
+      if (invoice.description !== undefined) payload.description = invoice.description;
+      if (invoice.totalInvoice !== undefined) payload.total_invoice = invoice.totalInvoice;
+      if (invoice.termin !== undefined) payload.termin = invoice.termin;
+
+      supabase.from('invoices').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update invoice error", error);
+      });
+    } else {
+      save('cpms_invoices', updated);
+    }
     showToast('success', 'Invoice berhasil diperbarui');
   };
 
@@ -465,69 +703,162 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedPayments = payments.filter(p => p.invoiceId !== id);
     setInvoices(updatedInvoices);
     setPayments(updatedPayments);
-    save('cpms_invoices', updatedInvoices);
-    save('cpms_payments', updatedPayments);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('invoices').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete invoice error", error);
+      });
+    } else {
+      save('cpms_invoices', updatedInvoices);
+      save('cpms_payments', updatedPayments);
+    }
     showToast('success', 'Invoice berhasil dihapus');
   };
 
   const addPayment = (payment: Omit<Payment, 'id'>) => {
-    const newPayment = { ...payment, id: 'p_' + crypto.randomUUID() };
+    const newId = crypto.randomUUID();
+    const newPayment = { ...payment, id: newId };
     const updated = [...payments, newPayment];
     setPayments(updated);
-    save('cpms_payments', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('payments').insert([{
+        id: newId,
+        invoice_id: payment.invoiceId,
+        payment_date: payment.paymentDate,
+        amount: payment.amount,
+        payment_note: payment.paymentNote
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert payment error", error);
+      });
+    } else {
+      save('cpms_payments', updated);
+    }
     showToast('success', 'Pembayaran berhasil ditambahkan');
   };
 
   const updatePayment = (id: string, payment: Partial<Payment>) => {
     const updated = payments.map(p => p.id === id ? { ...p, ...payment } : p);
     setPayments(updated);
-    save('cpms_payments', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (payment.invoiceId !== undefined) payload.invoice_id = payment.invoiceId;
+      if (payment.paymentDate !== undefined) payload.payment_date = payment.paymentDate;
+      if (payment.amount !== undefined) payload.amount = payment.amount;
+      if (payment.paymentNote !== undefined) payload.payment_note = payment.paymentNote;
+
+      supabase.from('payments').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update payment error", error);
+      });
+    } else {
+      save('cpms_payments', updated);
+    }
     showToast('success', 'Pembayaran berhasil diperbarui');
   };
 
   const deletePayment = (id: string) => {
     const updated = payments.filter(p => p.id !== id);
     setPayments(updated);
-    save('cpms_payments', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('payments').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete payment error", error);
+      });
+    } else {
+      save('cpms_payments', updated);
+    }
     showToast('success', 'Pembayaran berhasil dihapus');
   };
 
   // Cashflow
   const addCashflow = (cashflow: Omit<Cashflow, 'id' | 'runningBalance'>) => {
+    const newId = crypto.randomUUID();
     const newCf = { 
       ...cashflow, 
-      id: 'cf_' + crypto.randomUUID(),
+      id: newId,
       createdAt: Date.now()
     };
     const updated = [...cashflows, newCf];
     setCashflows(updated);
-    save('cpms_cashflows', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('cashflows').insert([{
+        id: newId,
+        transaction_date: cashflow.transactionDate,
+        transaction_type: cashflow.transactionType,
+        category_id: cashflow.categoryId || null,
+        subcategory_id: cashflow.subcategoryId || null,
+        vendor_id: cashflow.vendorId || null,
+        description: cashflow.description,
+        amount: cashflow.amount,
+        note: cashflow.note
+      }]).then(({ error }) => {
+        if (error) console.error("Supabase insert cashflow error", error);
+      });
+    } else {
+      save('cpms_cashflows', updated);
+    }
     showToast('success', 'Transaksi cashflow berhasil ditambahkan');
   };
 
   const addCashflows = (cashflowList: Omit<Cashflow, 'id' | 'runningBalance'>[]) => {
     const newItems = cashflowList.map((cf, index) => ({
       ...cf,
-      id: 'cf_' + crypto.randomUUID() + '_' + index,
+      id: crypto.randomUUID(),
       createdAt: Date.now() + index
     }));
     const updated = [...cashflows, ...newItems];
     setCashflows(updated);
-    save('cpms_cashflows', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payloads = newItems.map(cf => ({
+        id: cf.id,
+        transaction_date: cf.transactionDate,
+        transaction_type: cf.transactionType,
+        category_id: cf.categoryId || null,
+        subcategory_id: cf.subcategoryId || null,
+        vendor_id: cf.vendorId || null,
+        description: cf.description,
+        amount: cf.amount,
+        note: cf.note
+      }));
+      supabase.from('cashflows').insert(payloads).then(({ error }) => {
+        if (error) console.error("Supabase insert multiple cashflows error", error);
+      });
+    } else {
+      save('cpms_cashflows', updated);
+    }
     showToast('success', `Berhasil mengimpor ${cashflowList.length} transaksi cashflow`);
   };
 
   const updateCashflow = (id: string, cashflow: Partial<Cashflow>) => {
     const updated = cashflows.map(c => c.id === id ? { ...c, ...cashflow } : c);
     setCashflows(updated);
-    save('cpms_cashflows', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (cashflow.transactionDate !== undefined) payload.transaction_date = cashflow.transactionDate;
+      if (cashflow.transactionType !== undefined) payload.transaction_type = cashflow.transactionType;
+      if (cashflow.categoryId !== undefined) payload.category_id = cashflow.categoryId || null;
+      if (cashflow.subcategoryId !== undefined) payload.subcategory_id = cashflow.subcategoryId || null;
+      if (cashflow.vendorId !== undefined) payload.vendor_id = cashflow.vendorId || null;
+      if (cashflow.description !== undefined) payload.description = cashflow.description;
+      if (cashflow.amount !== undefined) payload.amount = cashflow.amount;
+      if (cashflow.note !== undefined) payload.note = cashflow.note;
+
+      supabase.from('cashflows').update(payload).eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase update cashflow error", error);
+      });
+    } else {
+      save('cpms_cashflows', updated);
+    }
     showToast('success', 'Transaksi cashflow berhasil diperbarui');
   };
 
   const deleteCashflow = (id: string) => {
     const updated = cashflows.filter(c => c.id !== id);
     setCashflows(updated);
-    save('cpms_cashflows', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('cashflows').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error("Supabase delete cashflow error", error);
+      });
+    } else {
+      save('cpms_cashflows', updated);
+    }
     showToast('success', 'Transaksi cashflow berhasil dihapus');
   };
 
