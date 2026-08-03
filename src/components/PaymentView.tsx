@@ -764,7 +764,7 @@ export const PaymentView: React.FC = () => {
                       {new Date(inv.invoiceDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                     </span>
                   </td>
-                  <td className="py-4 px-4 text-slate-700 font-medium truncate max-w-[200px]" title={inv.vendorName}>{inv.vendorName}</td>
+                  <td className="py-4 px-4 text-slate-700 font-medium break-words max-w-[200px]" title={inv.vendorName}>{inv.vendorName}</td>
                   <td className="py-4 px-4 font-semibold text-slate-800 break-words max-w-[384px]">{inv.description}</td>
                   <td className="py-4 px-4 text-center text-slate-600 font-bold whitespace-nowrap">{inv.termin}</td>
                   <td className="py-4 px-4 text-right font-bold text-slate-700 whitespace-nowrap">{formatRupiah(inv.totalInvoice)}</td>
