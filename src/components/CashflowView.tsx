@@ -567,6 +567,12 @@ export const CashflowView: React.FC = () => {
           return key ? row[key] : undefined;
         };
 
+        // 1. Initialize local cache from database categories
+        const categoryCache = new Map<string, string>(); // key: normalized name, value: categoryId
+        categories.forEach(c => {
+          categoryCache.set(c.name.trim().toLowerCase(), c.id);
+        });
+
         let importedCount = 0;
         let errorCount = 0;
         const listToImport: Omit<Cashflow, 'id' | 'runningBalance'>[] = [];
@@ -657,20 +663,23 @@ export const CashflowView: React.FC = () => {
 
           // Parse category (find or add new category)
           let catId = '';
-          const categoryName = valKategori ? valKategori.toString().trim() : '';
-          if (categoryName && categoryName !== '-') {
-            const foundCategory = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
-            if (foundCategory) {
-              catId = foundCategory.id;
+          const rawCategoryName = valKategori ? valKategori.toString() : '';
+          const normalizedName = rawCategoryName.trim().toLowerCase();
+          if (rawCategoryName && rawCategoryName.trim() !== '-') {
+            const cachedId = categoryCache.get(normalizedName);
+            if (cachedId) {
+              catId = cachedId;
             } else {
               // Automatically create the category with default attributes
               const newCat = addCategory({
-                name: categoryName,
+                name: rawCategoryName.trim(),
                 icon: 'Wallet',
                 color: '#3B82F6',
                 active: true
               });
               catId = newCat.id;
+              // Add to cache so that subsequent rows in this file import reuse it
+              categoryCache.set(normalizedName, catId);
             }
           }
 
