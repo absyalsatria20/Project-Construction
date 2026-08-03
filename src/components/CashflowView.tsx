@@ -966,7 +966,7 @@ export const CashflowView: React.FC = () => {
                             {cf.transactionType}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-slate-700 font-medium truncate max-w-[190px]" title={categoryName}>
+                        <td className="py-4 px-4 text-slate-700 font-medium break-words max-w-[190px]" title={categoryName}>
                           {categoryName}
                         </td>
                         <td className="py-4 px-4 text-slate-800 font-medium break-words max-w-[384px]">
