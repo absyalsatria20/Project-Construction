@@ -14,28 +14,28 @@ test.describe('Cashflow Ledger Feature', () => {
     await page.fill('input[placeholder="0"]', '75000');
     await page.click('button:has-text("Simpan Transaksi")');
 
-    await expect(page.locator('text=Beli Kertas A4 E2E')).toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E').first()).toBeVisible();
 
     await page.fill('input[placeholder="Cari deskripsi transaksi..."]', 'Nonexistent');
-    await expect(page.locator('text=Beli Kertas A4 E2E')).not.toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E').first()).not.toBeVisible();
     await page.fill('input[placeholder="Cari deskripsi transaksi..."]', 'Beli Kertas');
-    await expect(page.locator('text=Beli Kertas A4 E2E')).toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E').first()).toBeVisible();
 
     // Click edit on the first row
     await page.click('table tbody tr:first-child td:last-child button:first-child');
     await page.fill('input[placeholder="Keterangan pengeluaran..."]', 'Beli Kertas A4 E2E Edited');
     await page.click('button:has-text("Simpan Transaksi")');
-    await expect(page.locator('text=Beli Kertas A4 E2E Edited')).toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E Edited').first()).toBeVisible();
 
     await page.selectOption('select', 'Dana Masuk');
-    await expect(page.locator('text=Beli Kertas A4 E2E Edited')).not.toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E Edited').first()).not.toBeVisible();
     await page.selectOption('select', 'Pengeluaran');
-    await expect(page.locator('text=Beli Kertas A4 E2E Edited')).toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E Edited').first()).toBeVisible();
     await page.selectOption('select', '');
 
     // Click delete on the first row
     await page.click('table tbody tr:first-child td:last-child button:last-child');
     await page.click('button:has-text("Hapus")');
-    await expect(page.locator('text=Beli Kertas A4 E2E Edited')).not.toBeVisible();
+    await expect(page.locator('text=Beli Kertas A4 E2E Edited').first()).not.toBeVisible();
   });
 });

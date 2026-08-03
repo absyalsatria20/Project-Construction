@@ -13,7 +13,7 @@ test.describe('Rekap Pembayaran Feature', () => {
     await expect(page.locator('h3:has-text("Daftar Vendor")')).toBeVisible();
     await page.fill('input[placeholder="Nama vendor..."]', 'Vendor E2E');
     await page.click('button:has-text("Tambah")');
-    await expect(page.locator('span:has-text("Vendor E2E")')).toBeVisible();
+    await expect(page.locator('span:has-text("Vendor E2E")').first()).toBeVisible();
     await page.click('button:has-text("Tutup")');
 
     await page.click('text=Create Invoice');
@@ -25,9 +25,9 @@ test.describe('Rekap Pembayaran Feature', () => {
     await page.fill('div:has(> label:has-text("Keterangan")) >> textarea', 'Pembelian Semen E2E');
     await page.click('form button:has-text("Simpan")');
 
-    await expect(page.locator('td:has-text("Pembelian Semen E2E")')).toBeVisible();
+    await expect(page.locator('td:has-text("Pembelian Semen E2E")').first()).toBeVisible();
 
-    const row = page.locator('tr:has-text("Pembelian Semen E2E")');
+    const row = page.locator('tr:has-text("Pembelian Semen E2E")').first();
     await expect(row.locator('text=Rp 0')).toBeVisible();
     await expect(row.locator('text=Rp 1.000.000').first()).toBeVisible();
 
@@ -64,7 +64,7 @@ test.describe('Rekap Pembayaran Feature', () => {
     expect(downloadPDF.suggestedFilename()).toContain('.pdf');
 
     await row.locator('button[title="Hapus"]').click();
-    await page.click('button:has-text("Hapus")');
-    await expect(page.locator('td:has-text("Pembelian Semen E2E")')).not.toBeVisible();
+    await page.click('.test-confirm-btn');
+    await expect(page.locator('td:has-text("Pembelian Semen E2E")').first()).not.toBeVisible();
   });
 });

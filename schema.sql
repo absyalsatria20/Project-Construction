@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS cashflows (
     description TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     note TEXT DEFAULT '',
+    row_index INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

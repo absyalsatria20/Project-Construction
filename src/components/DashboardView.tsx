@@ -345,8 +345,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
               <span className="text-xs font-semibold text-slate-400">Menampilkan 4 transaksi terakhir</span>
             </div>
             <div className="divide-y divide-slate-100">
-              {cashflows.slice(-4).reverse().map((cf) => (
-                <div key={cf.id} className="py-3 flex items-center justify-between">
+              {[...cashflows]
+                .sort((a, b) => {
+                  const rowA = a.rowIndex || 0;
+                  const rowB = b.rowIndex || 0;
+                  return rowB - rowA;
+                })
+                .slice(0, 4)
+                .map((cf) => (
+                  <div key={cf.id} className="py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl ${
                       cf.transactionType === 'Dana Masuk' 

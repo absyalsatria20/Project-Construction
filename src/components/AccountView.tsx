@@ -35,9 +35,13 @@ export const AccountView: React.FC<AccountViewProps> = ({ onClose }) => {
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], "UTF-8");
+      const file = e.target.files[0];
+      // Reset input value immediately to prevent double execution
+      e.target.value = '';
+      
+      const fileReader = new FileReader();
+      fileReader.readAsText(file, "UTF-8");
       fileReader.onload = (event) => {
         if (event.target && typeof event.target.result === 'string') {
           const success = importAllData(event.target.result);

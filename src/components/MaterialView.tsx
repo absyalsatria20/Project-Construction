@@ -31,8 +31,13 @@ export const MaterialView: React.FC = () => {
     itemsPerPage, 
     setItemsPerPage,
     openMaterialModal,
-    setOpenMaterialModal
+    setOpenMaterialModal,
+    deleteMaterials
   } = useApp();
+
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkEditMode, setIsBulkEditMode] = useState(false);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -350,6 +355,29 @@ export const MaterialView: React.FC = () => {
           <table className="w-full min-w-[1100px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 backdrop-blur-md z-10">
+                {isBulkEditMode && (
+                  <th className="py-4 px-4 text-center w-12">
+                    <input
+                      type="checkbox"
+                      checked={paginatedMaterials.length > 0 && paginatedMaterials.every(m => selectedIds.includes(m.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const newSelections = [...selectedIds];
+                          paginatedMaterials.forEach(m => {
+                            if (!newSelections.includes(m.id)) {
+                              newSelections.push(m.id);
+                            }
+                          });
+                          setSelectedIds(newSelections);
+                        } else {
+                          const paginatedIds = paginatedMaterials.map(m => m.id);
+                          setSelectedIds(selectedIds.filter(id => !paginatedIds.includes(id)));
+                        }
+                      }}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="py-4 px-6 font-semibold w-96">
                   <button onClick={() => handleSort('itemName')} className="flex items-center gap-1 hover:text-slate-800">
                     Item Name <ArrowUpDown className="w-3.5 h-3.5" />
@@ -377,6 +405,22 @@ export const MaterialView: React.FC = () => {
 
                 return (
                   <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                    {isBulkEditMode && (
+                      <td className="py-4 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(m.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds([...selectedIds, m.id]);
+                            } else {
+                              setSelectedIds(selectedIds.filter(id => id !== m.id));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="py-4 px-6 font-semibold text-slate-800 break-words max-w-[384px]">{m.itemName}</td>
                     <td className="py-4 px-4 text-center text-slate-600 font-medium whitespace-nowrap">{m.unit}</td>
                     <td className="py-4 px-4 text-right font-semibold text-slate-700 whitespace-nowrap">{m.quantityRequested}</td>
@@ -448,7 +492,7 @@ export const MaterialView: React.FC = () => {
               })}
               {processedMaterials.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-400 font-medium">
+                  <td colSpan={isBulkEditMode ? 10 : 9} className="py-16 text-center text-slate-400 font-medium">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
                         <Search className="w-6 h-6 text-slate-300" />
@@ -465,15 +509,35 @@ export const MaterialView: React.FC = () => {
           </table>
         </div>
 
-        {/* Pagination Section */}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={processedMaterials.length}
-          itemsPerPage={itemsPerPage}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={setItemsPerPage}
-        />
+        {/* Pagination & Bulk Selection Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-t border-slate-100 bg-slate-50/30">
+          <div className="flex items-center gap-2 order-2 sm:order-1">
+            <button
+              onClick={() => {
+                setIsBulkEditMode(!isBulkEditMode);
+                setSelectedIds([]);
+              }}
+              className={`inline-flex items-center justify-center px-4 py-2 border rounded-xl text-xs font-semibold transition-colors gap-1.5 ${
+                isBulkEditMode 
+                  ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' 
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isBulkEditMode ? 'Batal Pilih' : 'Pilih Banyak'}</span>
+            </button>
+          </div>
+          <div className="flex-1 flex justify-end order-1 sm:order-2">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={processedMaterials.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          </div>
+        </div>
       </div>
 
       {/* CRUD / Detail Modal */}
@@ -739,6 +803,47 @@ export const MaterialView: React.FC = () => {
         onConfirm={dialogState.onConfirm}
         onClose={closeDialog}
       />
+
+      {/* Floating Bulk Action Bar */}
+      <AnimatePresence>
+        {isBulkEditMode && selectedIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] w-[90%] max-w-md bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border border-slate-800"
+          >
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 font-medium">Bulk Action</span>
+              <span className="text-sm font-bold">{selectedIds.length} material dipilih</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  showConfirm(
+                    'Hapus Terpilih',
+                    `Apakah Anda yakin ingin menghapus ${selectedIds.length} material terpilih?`,
+                    () => {
+                      deleteMaterials(selectedIds);
+                      setSelectedIds([]);
+                    }
+                  );
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Hapus
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

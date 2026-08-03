@@ -42,8 +42,13 @@ export const CashflowView: React.FC = () => {
     itemsPerPage,
     setItemsPerPage,
     openCashflowModal,
-    setOpenCashflowModal
+    setOpenCashflowModal,
+    deleteCashflows
   } = useApp();
+
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkEditMode, setIsBulkEditMode] = useState(false);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,7 +58,7 @@ export const CashflowView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
 
   // Sorting
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -221,16 +226,13 @@ export const CashflowView: React.FC = () => {
         return;
       }
     } else {
-      if (!categoryId) {
-        setFormError('Kategori wajib dipilih.');
-        return;
-      }
+      // Tidak wajib kategori untuk Dana Masuk, tapi jika ada diisi silakan. Atau samakan saja set categoryId ke kosong/default
     }
 
     const payload = {
       transactionDate,
       transactionType,
-      categoryId: transactionType === 'Pengeluaran' ? (categoryId || undefined) : undefined,
+      categoryId: (categoryId || undefined),
       vendorId: transactionType === 'Pengeluaran' ? (vendorId || undefined) : undefined,
       description: description,
       amount,
@@ -325,17 +327,11 @@ export const CashflowView: React.FC = () => {
       result = result.filter(cf => cf.transactionDate <= dateFilterEnd);
     }
 
-    // Sorting murni berdasarkan tanggal transaksi (transactionDate) terlebih dahulu, kemudian waktu pembuatan (createdAt) agar tersusun rapi jika tanggal loncat
+    // Sorting berdasarkan rowIndex agar identik dengan baris Excel yang diimport
     result.sort((a, b) => {
-      const dateA = new Date(a.transactionDate).getTime();
-      const dateB = new Date(b.transactionDate).getTime();
-      if (dateA !== dateB) {
-        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
-      }
-      
-      const timeA = a.createdAt || 0;
-      const timeB = b.createdAt || 0;
-      return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
+      const rowA = a.rowIndex || 0;
+      const rowB = b.rowIndex || 0;
+      return sortDirection === 'asc' ? rowA - rowB : rowB - rowA;
     });
 
     return result;
@@ -554,31 +550,47 @@ export const CashflowView: React.FC = () => {
         }
 
         // Validate headers. Expected: 'Tanggal', 'Jenis', 'Kategori', 'Keterangan', 'Nominal', 'Catatan'
-        const firstRowKeys = Object.keys(jsonData[0]);
-        const hasRequiredHeaders = ['Tanggal', 'Jenis', 'Keterangan', 'Nominal'].every(h => firstRowKeys.includes(h));
+        const firstRowKeys = Object.keys(jsonData[0]).map(k => k.trim());
+        const expectedHeaders = ['Tanggal', 'Jenis', 'Keterangan', 'Nominal'];
+        const hasRequiredHeaders = expectedHeaders.every(h => 
+          firstRowKeys.some(key => key.toLowerCase() === h.toLowerCase())
+        );
 
         if (!hasRequiredHeaders) {
           showAlert('Format Tidak Sesuai', 'Format header Excel tidak sesuai. Harus mengandung kolom: Tanggal, Jenis, Keterangan, Nominal.', 'error');
           return;
         }
 
+        // Helper to find exact key case-insensitively
+        const getRowValue = (row: Record<string, string | number>, header: string): unknown => {
+          const key = Object.keys(row).find(k => k.trim().toLowerCase() === header.toLowerCase());
+          return key ? row[key] : undefined;
+        };
+
         let importedCount = 0;
         let errorCount = 0;
         const listToImport: Omit<Cashflow, 'id' | 'runningBalance'>[] = [];
 
-        jsonData.forEach((row) => {
+        jsonData.forEach((row, index) => {
+          const valTanggal = getRowValue(row, 'Tanggal');
+          const valJenis = getRowValue(row, 'Jenis');
+          const valKeterangan = getRowValue(row, 'Keterangan');
+          const valNominal = getRowValue(row, 'Nominal');
+          const valKategori = getRowValue(row, 'Kategori');
+          const valCatatan = getRowValue(row, 'Catatan');
+
           // Parse transactionDate
           let dateStr = '';
-          if (row['Tanggal']) {
-            if (typeof row['Tanggal'] === 'number') {
+          if (valTanggal !== undefined && valTanggal !== null) {
+            if (typeof valTanggal === 'number') {
               // Handle Excel serial date number
-              const utc_days = Math.floor(row['Tanggal'] - 25569);
+              const utc_days = Math.floor(valTanggal - 25569);
               const utc_value = utc_days * 86400;
               const date_info = new Date(utc_value * 1000);
               dateStr = `${date_info.getFullYear()}-${String(date_info.getMonth() + 1).padStart(2, '0')}-${String(date_info.getDate()).padStart(2, '0')}`;
             } else {
               // Try standard date parsing
-              const parts = row['Tanggal'].toString().split(/[-/]/);
+              const parts = String(valTanggal).split(/[-/]/);
               if (parts.length === 3) {
                 // If format is YYYY-MM-DD
                 if (parts[0].length === 4) {
@@ -588,7 +600,7 @@ export const CashflowView: React.FC = () => {
                 }
               }
               if (!dateStr) {
-                const parsedDate = new Date(row['Tanggal']);
+                const parsedDate = new Date(String(valTanggal));
                 if (!isNaN(parsedDate.getTime())) {
                   dateStr = parsedDate.toISOString().split('T')[0];
                 }
@@ -602,7 +614,7 @@ export const CashflowView: React.FC = () => {
           }
 
           // Parse transactionType
-          const typeRaw = row['Jenis'] ? row['Jenis'].toString().trim().toLowerCase() : '';
+          const typeRaw = valJenis ? String(valJenis).trim().toLowerCase() : '';
           let type: 'Dana Masuk' | 'Pengeluaran' = 'Pengeluaran';
           if (
             typeRaw.includes('masuk') || 
@@ -628,10 +640,10 @@ export const CashflowView: React.FC = () => {
 
           // Parse amount (robust clean for currency symbols and thousand separator dots)
           let amt = 0;
-          if (typeof row['Nominal'] === 'number') {
-            amt = row['Nominal'];
-          } else if (row['Nominal']) {
-            const cleanStr = row['Nominal'].toString()
+          if (typeof valNominal === 'number') {
+            amt = valNominal;
+          } else if (valNominal) {
+            const cleanStr = String(valNominal)
               .replace(/Rp/gi, '')
               .replace(/\s/g, '')
               .replace(/\./g, ''); // hapus titik ribuan
@@ -645,7 +657,7 @@ export const CashflowView: React.FC = () => {
 
           // Parse category (find or add new category)
           let catId = '';
-          const categoryName = row['Kategori'] ? row['Kategori'].toString().trim() : '';
+          const categoryName = valKategori ? valKategori.toString().trim() : '';
           if (categoryName && categoryName !== '-') {
             const foundCategory = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
             if (foundCategory) {
@@ -662,8 +674,8 @@ export const CashflowView: React.FC = () => {
             }
           }
 
-          const desc = row['Keterangan'] ? row['Keterangan'].toString().trim() : '';
-          const note = row['Catatan'] ? row['Catatan'].toString().trim() : '';
+          const desc = valKeterangan ? valKeterangan.toString().trim() : '';
+          const note = valCatatan ? valCatatan.toString().trim() : '';
 
           if (!desc) {
             errorCount++;
@@ -677,7 +689,8 @@ export const CashflowView: React.FC = () => {
             categoryId: catId || undefined,
             description: desc,
             amount: amt,
-            note: note
+            note: note,
+            rowIndex: index + 1 // Add index (1-based row number) relative to current import batch
           });
         });
 
@@ -875,6 +888,29 @@ export const CashflowView: React.FC = () => {
               <table className="w-full min-w-[1100px] text-left border-collapse">
                   <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 backdrop-blur-md z-10">
+                    {isBulkEditMode && (
+                      <th className="py-4 px-4 text-center w-12">
+                        <input
+                          type="checkbox"
+                          checked={paginatedCashflows.length > 0 && paginatedCashflows.every(cf => selectedIds.includes(cf.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const newSelections = [...selectedIds];
+                              paginatedCashflows.forEach(cf => {
+                                if (!newSelections.includes(cf.id)) {
+                                  newSelections.push(cf.id);
+                                }
+                              });
+                              setSelectedIds(newSelections);
+                            } else {
+                              const paginatedIds = paginatedCashflows.map(cf => cf.id);
+                              setSelectedIds(selectedIds.filter(id => !paginatedIds.includes(id)));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                      </th>
+                    )}
                     <th className="py-4 px-6 font-semibold w-28">
                       <button onClick={() => { setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }} className="flex items-center gap-1 hover:text-slate-800">
                         Tanggal <ArrowUpDown className="w-3.5 h-3.5" />
@@ -904,6 +940,22 @@ export const CashflowView: React.FC = () => {
 
                     return (
                       <tr key={cf.id} className={`${bgClass} transition-colors`}>
+                        {isBulkEditMode && (
+                          <td className="py-4 px-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(cf.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedIds([...selectedIds, cf.id]);
+                                } else {
+                                  setSelectedIds(selectedIds.filter(id => id !== cf.id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">
                           {new Date(cf.transactionDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </td>
@@ -951,7 +1003,7 @@ export const CashflowView: React.FC = () => {
                   })}
                   {processedCashflows.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center text-slate-400 font-medium">
+                      <td colSpan={isBulkEditMode ? 9 : 8} className="py-16 text-center text-slate-400 font-medium">
                         <div className="flex flex-col items-center justify-center gap-3">
                           <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
                             <Search className="w-6 h-6 text-slate-300" />
@@ -968,15 +1020,35 @@ export const CashflowView: React.FC = () => {
               </table>
             </div>
 
-            {/* Pagination */}
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={processedCashflows.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-              onItemsPerPageChange={setItemsPerPage}
-            />
+            {/* Pagination & Bulk Selection */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-t border-slate-100 bg-slate-50/30">
+              <div className="flex items-center gap-2 order-2 sm:order-1">
+                <button
+                  onClick={() => {
+                    setIsBulkEditMode(!isBulkEditMode);
+                    setSelectedIds([]);
+                  }}
+                  className={`inline-flex items-center justify-center px-4 py-2 border rounded-xl text-xs font-semibold transition-colors gap-1.5 ${
+                    isBulkEditMode 
+                      ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' 
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isBulkEditMode ? 'Batal Pilih' : 'Pilih Banyak'}</span>
+                </button>
+              </div>
+              <div className="flex-1 flex justify-end order-1 sm:order-2">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={processedCashflows.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={setItemsPerPage}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1328,6 +1400,47 @@ export const CashflowView: React.FC = () => {
         onConfirm={dialogState.onConfirm}
         onClose={closeDialog}
       />
+
+      {/* Floating Bulk Action Bar */}
+      <AnimatePresence>
+        {isBulkEditMode && selectedIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] w-[90%] max-w-md bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border border-slate-800"
+          >
+            <div className="flex flex-col">
+              <span className="text-xs text-slate-400 font-medium">Bulk Action</span>
+              <span className="text-sm font-bold">{selectedIds.length} item dipilih</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  showConfirm(
+                    'Hapus Terpilih',
+                    `Apakah Anda yakin ingin menghapus ${selectedIds.length} transaksi terpilih?`,
+                    () => {
+                      deleteCashflows(selectedIds);
+                      setSelectedIds([]);
+                    }
+                  );
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Hapus
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

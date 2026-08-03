@@ -110,7 +110,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                   if (onConfirm) onConfirm();
                   onClose();
                 }}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${config.confirmBtnClass}`}
+                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors test-confirm-btn ${config.confirmBtnClass}`}
               >
                 {confirmLabel || (isAlertOnly ? 'OK' : 'Hapus')}
               </button>
