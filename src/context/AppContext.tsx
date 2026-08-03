@@ -240,19 +240,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchSupabaseData = async () => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
     try {
-      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes] = await Promise.all([
+      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes, aRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
         supabase.from('categories').select('*').order('name'),
         supabase.from('subcategories').select('*').order('name'),
         supabase.from('materials').select('*').order('item_name'),
         supabase.from('invoices').select('*'),
         supabase.from('payments').select('*'),
-        supabase.from('cashflows').select('*')
+        supabase.from('cashflows').select('*'),
+        supabase.from('accounts').select('*').eq('id', 'primary').maybeSingle()
       ]);
 
       if (vRes.data) setVendors(vRes.data);
       if (cRes.data) setCategories(cRes.data);
       if (scRes.data) setSubCategories(scRes.data);
+      if (aRes.data) {
+        // Sync account to LocalStorage
+        localStorage.setItem('cpms_user_username', aRes.data.username);
+        localStorage.setItem('cpms_user_password', aRes.data.password);
+        setCurrentUser({ username: aRes.data.username });
+      }
       if (mRes.data) {
         setMaterials(mRes.data.map((m) => ({
           id: m.id,
@@ -378,9 +385,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateAccount = (username: string, password?: string) => {
     setCurrentUser({ username });
     localStorage.setItem('cpms_user_username', username);
+    
+    const payload: Record<string, string> = { username };
     if (password) {
       localStorage.setItem('cpms_user_password', password);
+      payload.password = password;
     }
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      supabase.from('accounts').upsert({ id: 'primary', ...payload }).then(({ error }) => {
+        if (error) console.error("Supabase upsert account error", error);
+      });
+    }
+
     showToast('success', 'Akun berhasil diperbarui');
   };
 

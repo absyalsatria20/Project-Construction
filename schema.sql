@@ -3,6 +3,19 @@
 -- Enable UUID extension if not enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- 0. Accounts Table
+CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY, -- 'primary'
+    username TEXT NOT NULL DEFAULT 'admin',
+    password TEXT NOT NULL DEFAULT 'admin123',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Insert Default Account
+INSERT INTO accounts (id, username, password) 
+VALUES ('primary', 'admin', 'admin123') 
+ON CONFLICT (id) DO NOTHING;
+
 -- 1. Vendors Table
 CREATE TABLE IF NOT EXISTS vendors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
