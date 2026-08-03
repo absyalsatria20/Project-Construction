@@ -60,6 +60,20 @@ export const CashflowView: React.FC = () => {
   // Sorting
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Load initial sorting preference from localStorage on mount
+  useEffect(() => {
+    const savedDirection = localStorage.getItem('cashflow_sort_order');
+    if (savedDirection === 'asc' || savedDirection === 'desc') {
+      setSortDirection(savedDirection);
+    }
+  }, []);
+
+  const handleSortChange = () => {
+    const nextDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    setSortDirection(nextDirection);
+    localStorage.setItem('cashflow_sort_order', nextDirection);
+  };
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -921,7 +935,7 @@ export const CashflowView: React.FC = () => {
                       </th>
                     )}
                     <th className="py-4 px-6 font-semibold w-28">
-                      <button onClick={() => { setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }} className="flex items-center gap-1 hover:text-slate-800">
+                      <button onClick={handleSortChange} className="flex items-center gap-1 hover:text-slate-800">
                         Tanggal <ArrowUpDown className="w-3.5 h-3.5" />
                       </button>
                     </th>
