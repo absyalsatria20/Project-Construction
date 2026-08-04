@@ -1,0 +1,5 @@
+Semua fitur utama jalan stabil. Rencana berikut:
+1. Realtime Sync: Pasang Supabase Realtime. Sinkron data otomatis tanpa refresh antar HP dan desktop.
+2. Offline Mode: Simpan antrean aksi gagal saat offline. Kirim ulang saat internet aktif kembali.
+3. Laporan Keuangan: Tambah grafik perbandingan bulanan / tahunan di Dashboard.
+4. Notifikasi Material: Warning otomatis jika status material "Waiting" terlalu lama.

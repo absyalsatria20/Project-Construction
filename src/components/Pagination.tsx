@@ -51,10 +51,10 @@ export const Pagination: React.FC<PaginationProps> = ({
   const endItem = Math.min(totalItems, currentPage * itemsPerPage);
 
   return (
-    <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+    <div className="py-2.5 flex flex-col md:flex-row items-center justify-between gap-4 select-none w-full">
       <div className="flex items-center gap-4">
-        <p className="text-xs text-slate-500 font-medium">
-          Menampilkan <span className="font-semibold text-slate-700">{startItem}-{endItem}</span> dari <span className="font-semibold text-slate-700">{totalItems}</span> data
+        <p className="text-sm text-slate-500 font-semibold">
+          Menampilkan <span className="font-bold text-slate-700">{startItem}-{endItem}</span> dari <span className="font-bold text-slate-700">{totalItems}</span> data
         </p>
         <select
           value={itemsPerPage}
@@ -62,7 +62,7 @@ export const Pagination: React.FC<PaginationProps> = ({
             onItemsPerPageChange(Number(e.target.value));
             onPageChange(1);
           }}
-          className="px-2 py-1 border border-slate-200 rounded-lg text-xs focus:outline-none bg-white text-slate-700 font-semibold cursor-pointer"
+          className="h-8 px-2 border border-slate-200 rounded-lg text-xs focus:outline-none bg-white text-slate-700 font-bold cursor-pointer transition-all"
         >
           <option value={5}>5 / Halaman</option>
           <option value={10}>10 / Halaman</option>
@@ -71,7 +71,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <option value={100}>100 / Halaman</option>
         </select>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5 md:absolute md:left-1/2 md:-translate-x-1/2">
         <button
           onClick={() => onPageChange(Math.max(currentPage - 1, 1))}
           disabled={currentPage === 1}
@@ -93,7 +93,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               onClick={() => onPageChange(page as number)}
               className={`w-8 h-8 rounded-lg text-xs font-semibold border transition-all ${
                 currentPage === page
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/10'
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                   : 'border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -109,6 +109,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
+      <div className="w-20 hidden md:block" />
     </div>
   );
 };

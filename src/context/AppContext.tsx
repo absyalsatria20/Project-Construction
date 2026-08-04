@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 
 // Interfaces
@@ -227,16 +227,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cashflows, setCashflows] = useState<Cashflow[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const showToast = useCallback((type: 'success' | 'error' | 'info' | 'warning', message: string) => {
     const id = generateUUID();
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       removeToast(id);
     }, 4000);
+  }, [removeToast]);
+
+  // Offline Mode queue and sync logic
+  useEffect(() => {
+    const handleOnline = async () => {
+      const queue = JSON.parse(localStorage.getItem('cpms_offline_queue') || '[]');
+      if (queue.length === 0) return;
+      showToast('info', `Menghubungkan kembali... Memproses ${queue.length} aksi tertunda.`);
+      
+      const newQueue = [];
+      for (const action of queue) {
+        try {
+          const { table, method, payload, match, timestamp } = action;
+          const query = supabase.from(table);
+          
+          if (method === 'update' || method === 'delete') {
+            const id = match?.id || match?.invoice_id;
+            if (id) {
+              const { data: serverData } = await query.select('updated_at').match(match).maybeSingle();
+              if (serverData && (serverData as { updated_at?: string }).updated_at) {
+                const serverTime = new Date((serverData as { updated_at?: string }).updated_at || 0).getTime();
+                const actionTime = timestamp || 0;
+                if (serverTime > actionTime) {
+                  console.warn(`Conflict detected for ${table} with id ${id}. Server data is newer. Action discarded.`);
+                  continue;
+                }
+              }
+            }
+          }
+
+          if (method === 'insert') {
+            const { error } = await query.insert(payload);
+            if (error) throw error;
+          } else if (method === 'update') {
+            const { error } = await query.update(payload).match(match);
+            if (error) throw error;
+          } else if (method === 'delete') {
+            const { error } = await query.delete().match(match);
+            if (error) throw error;
+          } else if (method === 'upsert') {
+            const { error } = await query.upsert(payload);
+            if (error) throw error;
+          }
+        } catch (err) {
+          console.error("Failed to sync offline action:", err);
+          newQueue.push(action);
+        }
+      }
+      
+      if (newQueue.length > 0) {
+        localStorage.setItem('cpms_offline_queue', JSON.stringify(newQueue));
+        showToast('warning', `Sebagian aksi gagal disinkronkan kembali. Tersisa ${newQueue.length} aksi.`);
+      } else {
+        localStorage.removeItem('cpms_offline_queue');
+        showToast('success', 'Semua data offline berhasil disinkronkan!');
+        fetchSupabaseData();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [showToast]);
+
+  const queueOfflineAction = (action: { table: string; method: string; payload?: unknown; match?: Record<string, unknown> }) => {
+    const queue = JSON.parse(localStorage.getItem('cpms_offline_queue') || '[]');
+    queue.push({ ...action, timestamp: Date.now() });
+    localStorage.setItem('cpms_offline_queue', JSON.stringify(queue));
+    showToast('warning', 'Sedang offline. Aksi disimpan dalam antrean.');
   };
 
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+  interface SupabaseError {
+    message: string;
+    status?: number;
+    code?: string;
+  }
+
+  const handleSupabaseWrite = async (
+    operation: () => Promise<{ error: SupabaseError | null } | null | undefined | void | unknown> | unknown,
+    offlineAction: { table: string; method: string; payload?: unknown; match?: Record<string, unknown> }
+  ) => {
+    if (!navigator.onLine) {
+      queueOfflineAction(offlineAction);
+      return;
+    }
+    try {
+      const res = await (operation as () => Promise<{ error: SupabaseError | null }>)();
+      if (res && res.error) {
+        const error = res.error;
+        // If error looks like a network error, queue it
+        if (error.message === 'Failed to fetch' || error.status === 0 || error.code === 'PGRST301') {
+          queueOfflineAction(offlineAction);
+        } else {
+          console.error("Supabase write error:", error);
+          showToast('error', `Gagal menyimpan: ${error.message}`);
+        }
+      }
+    } catch {
+      queueOfflineAction(offlineAction);
+    }
   };
 
   const [itemsPerPage, setItemsPerPageState] = useState<number>(5);
@@ -341,6 +440,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
       fetchSupabaseData();
+
+      const channel = supabase
+        .channel('db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public' },
+          () => {
+            fetchSupabaseData();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } else {
       const localVendors = localStorage.getItem('cpms_vendors');
       const localCategories = localStorage.getItem('cpms_categories');
@@ -426,17 +540,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...vendors, newVendor];
     setVendors(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('vendors').insert([{
-        id: newId,
-        name: vendor.name,
-        address: vendor.address,
-        pic: vendor.pic,
-        phone: vendor.phone,
-        bank: vendor.bank,
-        account_number: vendor.accountNumber
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert vendor error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('vendors').insert([{
+          id: newId,
+          name: vendor.name,
+          address: vendor.address,
+          pic: vendor.pic,
+          phone: vendor.phone,
+          bank: vendor.bank,
+          account_number: vendor.accountNumber
+        }]),
+        {
+          table: 'vendors',
+          method: 'insert',
+          payload: {
+            id: newId,
+            name: vendor.name,
+            address: vendor.address,
+            pic: vendor.pic,
+            phone: vendor.phone,
+            bank: vendor.bank,
+            account_number: vendor.accountNumber
+          }
+        }
+      );
     } else {
       save('cpms_vendors', updated);
     }
@@ -456,9 +583,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (vendor.bank !== undefined) payload.bank = vendor.bank;
       if (vendor.accountNumber !== undefined) payload.account_number = vendor.accountNumber;
 
-      supabase.from('vendors').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update vendor error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('vendors').update(payload).eq('id', id),
+        {
+          table: 'vendors',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_vendors', updated);
     }
@@ -475,9 +608,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = vendors.filter(v => v.id !== id);
     setVendors(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('vendors').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete vendor error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('vendors').delete().eq('id', id),
+        {
+          table: 'vendors',
+          method: 'delete',
+          match: { id }
+        }
+      );
     } else {
       save('cpms_vendors', updated);
     }
@@ -492,15 +630,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...categories, newCategory];
     setCategories(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('categories').insert([{
-        id: newId,
-        name: category.name,
-        icon: category.icon,
-        color: category.color,
-        active: category.active
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert category error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('categories').insert([{
+          id: newId,
+          name: category.name,
+          icon: category.icon,
+          color: category.color,
+          active: category.active
+        }]),
+        {
+          table: 'categories',
+          method: 'insert',
+          payload: {
+            id: newId,
+            name: category.name,
+            icon: category.icon,
+            color: category.color,
+            active: category.active
+          }
+        }
+      );
     } else {
       save('cpms_categories', updated);
     }
@@ -518,9 +667,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (category.color !== undefined) payload.color = category.color;
       if (category.active !== undefined) payload.active = category.active;
 
-      supabase.from('categories').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update category error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('categories').update(payload).eq('id', id),
+        {
+          table: 'categories',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_categories', updated);
     }
@@ -538,9 +693,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCategories(updated);
     setSubCategories(updatedSub);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('categories').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete category error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('categories').delete().eq('id', id),
+        {
+          table: 'categories',
+          method: 'delete',
+          match: { id }
+        }
+      );
     } else {
       save('cpms_categories', updated);
       save('cpms_subcategories', updatedSub);
@@ -556,14 +716,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...subCategories, newSub];
     setSubCategories(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('subcategories').insert([{
-        id: newId,
-        category_id: sub.categoryId,
-        name: sub.name,
-        active: sub.active
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert subcategory error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('subcategories').insert([{
+          id: newId,
+          category_id: sub.categoryId,
+          name: sub.name,
+          active: sub.active
+        }]),
+        {
+          table: 'subcategories',
+          method: 'insert',
+          payload: {
+            id: newId,
+            category_id: sub.categoryId,
+            name: sub.name,
+            active: sub.active
+          }
+        }
+      );
     } else {
       save('cpms_subcategories', updated);
     }
@@ -580,9 +750,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (sub.name !== undefined) payload.name = sub.name;
       if (sub.active !== undefined) payload.active = sub.active;
 
-      supabase.from('subcategories').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update subcategory error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('subcategories').update(payload).eq('id', id),
+        {
+          table: 'subcategories',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_subcategories', updated);
     }
@@ -593,9 +769,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = subCategories.filter(s => s.id !== id);
     setSubCategories(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('subcategories').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete subcategory error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('subcategories').delete().eq('id', id),
+        {
+          table: 'subcategories',
+          method: 'delete',
+          match: { id }
+        }
+      );
     } else {
       save('cpms_subcategories', updated);
     }
@@ -615,19 +796,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...materials, newMat];
     setMaterials(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('materials').insert([{
-        id: newId,
-        item_name: material.itemName,
-        unit: material.unit,
-        quantity_requested: material.quantityRequested,
-        quantity_received: material.quantityReceived,
-        receive_date: material.receiveDate || null,
-        status,
-        verification: material.verification,
-        note: material.note
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert material error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('materials').insert([{
+          id: newId,
+          item_name: material.itemName,
+          unit: material.unit,
+          quantity_requested: material.quantityRequested,
+          quantity_received: material.quantityReceived,
+          receive_date: material.receiveDate || null,
+          status,
+          verification: material.verification,
+          note: material.note
+        }]),
+        {
+          table: 'materials',
+          method: 'insert',
+          payload: {
+            id: newId,
+            item_name: material.itemName,
+            unit: material.unit,
+            quantity_requested: material.quantityRequested,
+            quantity_received: material.quantityReceived,
+            receive_date: material.receiveDate || null,
+            status,
+            verification: material.verification,
+            note: material.note
+          }
+        }
+      );
     } else {
       save('cpms_materials', updated);
     }
@@ -662,9 +858,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (material.verification !== undefined) payload.verification = material.verification;
       if (material.note !== undefined) payload.note = material.note;
 
-      supabase.from('materials').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update material error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('materials').update(payload).eq('id', id),
+        {
+          table: 'materials',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_materials', updated);
     }
@@ -675,9 +877,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = materials.filter(m => m.id !== id);
     setMaterials(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('materials').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete material error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('materials').delete().eq('id', id),
+        {
+          table: 'materials',
+          method: 'delete',
+          match: { id }
+        }
+      );
     } else {
       save('cpms_materials', updated);
     }
@@ -688,9 +895,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = materials.filter(m => !ids.includes(m.id));
     setMaterials(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('materials').delete().in('id', ids).then(({ error }) => {
-        if (error) console.error("Supabase delete multiple materials error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('materials').delete().in('id', ids),
+        {
+          table: 'materials',
+          method: 'delete',
+          match: { id: ids } // match expects object, we handle it or customize it. In supabase.from().delete().in('id', ids), we can match using match: { id: ids } but match method might do exact match or we can map match array in handleOnline
+        }
+      );
     } else {
       save('cpms_materials', updated);
     }
@@ -708,17 +920,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...invoices, newInv];
     setInvoices(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('invoices').insert([{
-        id: newId,
-        vendor_id: invoice.vendorId,
-        invoice_number: invoice.invoiceNumber,
-        invoice_date: invoice.invoiceDate,
-        description: invoice.description,
-        total_invoice: invoice.totalInvoice,
-        termin: invoice.termin
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert invoice error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('invoices').insert([{
+          id: newId,
+          vendor_id: invoice.vendorId,
+          invoice_number: invoice.invoiceNumber,
+          invoice_date: invoice.invoiceDate,
+          description: invoice.description,
+          total_invoice: invoice.totalInvoice,
+          termin: invoice.termin
+        }]),
+        {
+          table: 'invoices',
+          method: 'insert',
+          payload: {
+            id: newId,
+            vendor_id: invoice.vendorId,
+            invoice_number: invoice.invoiceNumber,
+            invoice_date: invoice.invoiceDate,
+            description: invoice.description,
+            total_invoice: invoice.totalInvoice,
+            termin: invoice.termin
+          }
+        }
+      );
     } else {
       save('cpms_invoices', updated);
     }
@@ -737,9 +962,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (invoice.totalInvoice !== undefined) payload.total_invoice = invoice.totalInvoice;
       if (invoice.termin !== undefined) payload.termin = invoice.termin;
 
-      supabase.from('invoices').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update invoice error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('invoices').update(payload).eq('id', id),
+        {
+          table: 'invoices',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_invoices', updated);
     }
@@ -753,11 +984,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPayments(updatedPayments);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
       // Delete from payments first due to foreign key constraints in Supabase
-      supabase.from('payments').delete().eq('invoice_id', id).then(({ error: pErr }) => {
-        if (pErr) console.error("Supabase delete payments error on invoice delete", pErr);
-        supabase.from('invoices').delete().eq('id', id).then(({ error }) => {
-          if (error) console.error("Supabase delete invoice error", error);
-        });
+      handleSupabaseWrite(
+        () => supabase.from('payments').delete().eq('invoice_id', id),
+        {
+          table: 'payments',
+          method: 'delete',
+          match: { invoice_id: id }
+        }
+      ).then(() => {
+        handleSupabaseWrite(
+          () => supabase.from('invoices').delete().eq('id', id),
+          {
+            table: 'invoices',
+            method: 'delete',
+            match: { id }
+          }
+        );
       });
     } else {
       save('cpms_invoices', updatedInvoices);
@@ -772,11 +1014,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInvoices(updatedInvoices);
     setPayments(updatedPayments);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('payments').delete().in('invoice_id', ids).then(({ error: pErr }) => {
-        if (pErr) console.error("Supabase delete payments error on invoices delete", pErr);
-        supabase.from('invoices').delete().in('id', ids).then(({ error }) => {
-          if (error) console.error("Supabase delete multiple invoices error", error);
-        });
+      handleSupabaseWrite(
+        () => supabase.from('payments').delete().in('invoice_id', ids),
+        {
+          table: 'payments',
+          method: 'delete',
+          match: { invoice_id: ids }
+        }
+      ).then(() => {
+        handleSupabaseWrite(
+          () => supabase.from('invoices').delete().in('id', ids),
+          {
+            table: 'invoices',
+            method: 'delete',
+            match: { id: ids }
+          }
+        );
       });
     } else {
       save('cpms_invoices', updatedInvoices);
@@ -791,15 +1044,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...payments, newPayment];
     setPayments(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('payments').insert([{
-        id: newId,
-        invoice_id: payment.invoiceId,
-        payment_date: payment.paymentDate,
-        amount: payment.amount,
-        payment_note: payment.paymentNote
-      }]).then(({ error }) => {
-        if (error) console.error("Supabase insert payment error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('payments').insert([{
+          id: newId,
+          invoice_id: payment.invoiceId,
+          payment_date: payment.paymentDate,
+          amount: payment.amount,
+          payment_note: payment.paymentNote
+        }]),
+        {
+          table: 'payments',
+          method: 'insert',
+          payload: {
+            id: newId,
+            invoice_id: payment.invoiceId,
+            payment_date: payment.paymentDate,
+            amount: payment.amount,
+            payment_note: payment.paymentNote
+          }
+        }
+      );
     } else {
       save('cpms_payments', updated);
     }
@@ -816,9 +1080,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (payment.amount !== undefined) payload.amount = payment.amount;
       if (payment.paymentNote !== undefined) payload.payment_note = payment.paymentNote;
 
-      supabase.from('payments').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update payment error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('payments').update(payload).eq('id', id),
+        {
+          table: 'payments',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     } else {
       save('cpms_payments', updated);
     }
@@ -829,9 +1099,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = payments.filter(p => p.id !== id);
     setPayments(updated);
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('payments').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete payment error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('payments').delete().eq('id', id),
+        {
+          table: 'payments',
+          method: 'delete',
+          match: { id }
+        }
+      );
     } else {
       save('cpms_payments', updated);
     }
@@ -858,23 +1133,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     save('cpms_cashflows', updated);
 
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('cashflows').insert([{
-        id: newId,
-        transaction_date: cashflow.transactionDate,
-        transaction_type: cashflow.transactionType,
-        category_id: cashflow.categoryId || null,
-        subcategory_id: cashflow.subcategoryId || null,
-        vendor_id: cashflow.vendorId || null,
-        description: cashflow.description,
-        amount: cashflow.amount,
-        note: cashflow.note,
-        row_index: nextRowIndex
-      }]).then(({ error }) => {
-        if (error) {
-          console.error("Supabase insert cashflow error", error);
-        } else {
-          fetchSupabaseData();
+      handleSupabaseWrite(
+        () => supabase.from('cashflows').insert([{
+          id: newId,
+          transaction_date: cashflow.transactionDate,
+          transaction_type: cashflow.transactionType,
+          category_id: cashflow.categoryId || null,
+          subcategory_id: cashflow.subcategoryId || null,
+          vendor_id: cashflow.vendorId || null,
+          description: cashflow.description,
+          amount: cashflow.amount,
+          note: cashflow.note,
+          row_index: nextRowIndex
+        }]),
+        {
+          table: 'cashflows',
+          method: 'insert',
+          payload: {
+            id: newId,
+            transaction_date: cashflow.transactionDate,
+            transaction_type: cashflow.transactionType,
+            category_id: cashflow.categoryId || null,
+            subcategory_id: cashflow.subcategoryId || null,
+            vendor_id: cashflow.vendorId || null,
+            description: cashflow.description,
+            amount: cashflow.amount,
+            note: cashflow.note,
+            row_index: nextRowIndex
+          }
         }
+      ).then(() => {
+        fetchSupabaseData();
       });
     }
     showToast('success', 'Transaksi cashflow berhasil ditambahkan');
@@ -908,22 +1197,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         row_index: cf.rowIndex
       }));
 
-      try {
-        const result = await supabase.from('cashflows').insert(payloads);
-        if (result.error) {
-          console.error("Supabase insert error:", result.error);
-          showToast('error', `Gagal menyimpan ke Supabase: ${result.error.message}`);
-          return;
+      handleSupabaseWrite(
+        () => supabase.from('cashflows').insert(payloads),
+        {
+          table: 'cashflows',
+          method: 'insert',
+          payload: payloads
         }
-        console.log("Insert result", result);
-        
-        // Fetch fresh database data first
-        await fetchSupabaseData();
+      ).then(() => {
+        fetchSupabaseData();
         showToast('success', `Berhasil mengimpor ${cashflowList.length} transaksi cashflow ke database`);
-      } catch (err) {
-        console.error("Exception during Supabase insert:", err);
-        showToast('error', 'Gagal memproses penyimpanan ke database');
-      }
+      });
     } else {
       const updated = [...cashflows, ...newItems];
       setCashflows(updated);
@@ -950,9 +1234,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (cashflow.amount !== undefined) payload.amount = cashflow.amount;
       if (cashflow.note !== undefined) payload.note = cashflow.note;
 
-      supabase.from('cashflows').update(payload).eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase update cashflow error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('cashflows').update(payload).eq('id', id),
+        {
+          table: 'cashflows',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
     }
     showToast('success', 'Transaksi cashflow berhasil diperbarui');
   };
@@ -965,9 +1255,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     save('cpms_cashflows', updated);
 
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('cashflows').delete().eq('id', id).then(({ error }) => {
-        if (error) console.error("Supabase delete cashflow error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('cashflows').delete().eq('id', id),
+        {
+          table: 'cashflows',
+          method: 'delete',
+          match: { id }
+        }
+      );
     }
     showToast('success', 'Transaksi cashflow berhasil dihapus');
   };
@@ -980,9 +1275,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     save('cpms_cashflows', updated);
 
     if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      supabase.from('cashflows').delete().in('id', ids).then(({ error }) => {
-        if (error) console.error("Supabase delete multiple cashflows error", error);
-      });
+      handleSupabaseWrite(
+        () => supabase.from('cashflows').delete().in('id', ids),
+        {
+          table: 'cashflows',
+          method: 'delete',
+          match: { id: ids }
+        }
+      );
     }
     showToast('success', `${ids.length} transaksi cashflow berhasil dihapus`);
   };

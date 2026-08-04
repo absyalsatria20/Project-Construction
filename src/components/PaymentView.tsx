@@ -16,7 +16,8 @@ import {
   Calendar,
   FileSpreadsheet,
   FileText,
-  Users
+  Users,
+  Check
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -593,50 +594,50 @@ export const PaymentView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Search, Filter, Export Bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Search input */}
-          <div className="relative w-full max-w-xs">
-            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-slate-400" />
+          <div className="relative w-full lg:max-w-xs">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Cari invoice atau vendor..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/50"
+              className="w-full pl-10 pr-4 h-10 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/50 transition-all"
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3.5">
             <button
               onClick={() => setIsManagingVendors(true)}
-              className="inline-flex items-center justify-center p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors gap-1.5"
+              className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2"
               title="Kelola Vendor"
             >
               <Users className="w-4 h-4 text-blue-600" />
-              <span className="hidden sm:inline">Kelola Vendor</span>
+              <span>Kelola Vendor</span>
             </button>
             <button
               onClick={exportExcel}
-              className="inline-flex items-center justify-center p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors gap-1.5"
+              className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2"
               title="Export Excel"
             >
               <FileSpreadsheet className="w-4 h-4 text-green-600" />
-              <span className="hidden sm:inline">Excel</span>
+              <span>Excel</span>
             </button>
             <button
               onClick={exportPDF}
-              className="inline-flex items-center justify-center p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-slate-800 text-sm font-semibold transition-colors gap-1.5"
+              className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2"
               title="Export PDF"
             >
               <FileText className="w-4 h-4 text-red-500" />
-              <span className="hidden sm:inline">PDF</span>
+              <span>PDF</span>
             </button>
             <button
               onClick={handleOpenAddInvoice}
               disabled={vendors.length === 0}
-              className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors gap-1.5"
+              className="inline-flex items-center justify-center h-10 px-5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 transition-all gap-2 shadow-sm"
             >
               <Plus className="w-4 h-4" /> Create Invoice
             </button>
@@ -644,12 +645,12 @@ export const PaymentView: React.FC = () => {
         </div>
 
         {/* Filter Options */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+        <div className="flex flex-col md:flex-row md:items-center gap-4 pt-4 border-t border-slate-100">
           {/* Filter Vendor */}
           <select
             value={vendorFilter}
             onChange={(e) => { setVendorFilter(e.target.value); setCurrentPage(1); }}
-            className="px-2 py-1.5 border border-slate-200 rounded-lg text-base sm:text-xs focus:outline-none bg-white text-slate-700"
+            className="w-full md:w-56 h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-700 font-medium cursor-pointer transition-all"
           >
             <option value="">Semua Vendor</option>
             {vendors.map(v => (
@@ -658,20 +659,20 @@ export const PaymentView: React.FC = () => {
           </select>
 
           {/* Date Start & End */}
-          <div className="flex gap-1 items-center">
+          <div className="flex items-center gap-2 w-full md:w-auto">
             <input
               type="date"
               value={dateFilterStart}
               onChange={(e) => { setDateFilterStart(e.target.value); setCurrentPage(1); }}
-              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base sm:text-[10px] focus:outline-none bg-white text-slate-600"
+              className="w-full md:w-36 h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-600 transition-all"
               placeholder="Mulai"
             />
-            <span className="text-slate-400 text-xs">-</span>
+            <span className="text-slate-400 text-xs font-semibold">s/d</span>
             <input
               type="date"
               value={dateFilterEnd}
               onChange={(e) => { setDateFilterEnd(e.target.value); setCurrentPage(1); }}
-              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-base sm:text-[10px] focus:outline-none bg-white text-slate-600"
+              className="w-full md:w-36 h-10 px-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-600 transition-all"
               placeholder="Sampai"
             />
           </div>
@@ -679,7 +680,7 @@ export const PaymentView: React.FC = () => {
           {(searchTerm || vendorFilter || dateFilterStart || dateFilterEnd) && (
             <button
               onClick={() => { setSearchTerm(''); setVendorFilter(''); setDateFilterStart(''); setDateFilterEnd(''); }}
-              className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+              className="text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors self-center px-2 py-1 hover:bg-blue-50 rounded-lg whitespace-nowrap"
             >
               Reset Filter
             </button>
@@ -741,7 +742,7 @@ export const PaymentView: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {paginatedInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
+                <tr key={inv.id} className={`${selectedIds.includes(inv.id) ? 'bg-blue-50/30' : ''} hover:bg-slate-50/50 transition-colors`}>
                   {isBulkEditMode && (
                     <td className="py-4 px-4 text-center">
                       <input
@@ -827,8 +828,18 @@ export const PaymentView: React.FC = () => {
         </div>
 
         {/* Pagination & Bulk Selection */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-t border-slate-100 bg-slate-50/30">
-          <div className="flex items-center gap-2 order-2 sm:order-1">
+        <div className="border-t border-slate-100 bg-slate-50/30 p-4 relative">
+          <div className="flex-1">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={processedInvoices.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-start">
             <button
               onClick={() => {
                 setIsBulkEditMode(!isBulkEditMode);
@@ -843,16 +854,6 @@ export const PaymentView: React.FC = () => {
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isBulkEditMode ? 'Batal Pilih' : 'Pilih Banyak'}</span>
             </button>
-          </div>
-          <div className="flex-1 flex justify-end order-1 sm:order-2">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={processedInvoices.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-              onItemsPerPageChange={setItemsPerPage}
-            />
           </div>
         </div>
       </div>
@@ -1464,19 +1465,23 @@ export const PaymentView: React.FC = () => {
       <AnimatePresence>
         {isBulkEditMode && selectedIds.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] w-[90%] max-w-md bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 border border-slate-800"
+            initial={{ opacity: 0, y: 100, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 100, x: '-50%' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="fixed left-1/2 z-[999] w-[calc(100vw-32px)] max-w-md bg-white p-4 rounded-[20px] shadow-[0_12px_32px_rgba(0,0,0,0.15)] border border-slate-100 flex flex-col gap-3"
+            style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
           >
-            <div className="flex flex-col">
-              <span className="text-xs text-slate-400 font-medium">Bulk Action</span>
+            <div className="flex items-center gap-2 text-slate-800">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600">
+                <Check className="w-3.5 h-3.5" />
+              </span>
               <span className="text-sm font-bold">{selectedIds.length} invoice dipilih</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => setSelectedIds([])}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+                className="flex-1 h-12 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-[14px] text-sm font-bold transition-colors"
               >
                 Batal
               </button>
@@ -1491,10 +1496,10 @@ export const PaymentView: React.FC = () => {
                     }
                   );
                 }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                className="flex-1 h-12 bg-red-600 hover:bg-red-700 text-white rounded-[14px] text-sm font-bold transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-red-500/10"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Hapus
+                <Trash2 className="w-4 h-4" />
+                Hapus Banyak
               </button>
             </div>
           </motion.div>
