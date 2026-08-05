@@ -105,7 +105,7 @@ export const MaterialView: React.FC = () => {
   };
 
   // Reset form
-  const resetForm = () => {
+  const resetForm = React.useCallback(() => {
     setItemName('');
     setUnit('');
     setQuantityRequested(0);
@@ -114,20 +114,20 @@ export const MaterialView: React.FC = () => {
     setVerification(true);
     setNote('');
     setError('');
-  };
+  }, []);
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = React.useCallback(() => {
     resetForm();
     setModalMode('add');
     setIsModalOpen(true);
-  };
+  }, [resetForm]);
 
   useEffect(() => {
     if (openMaterialModal) {
       handleOpenAdd();
       setOpenMaterialModal(false);
     }
-  }, [openMaterialModal]);
+  }, [openMaterialModal, handleOpenAdd, setOpenMaterialModal]);
 
   const handleOpenEdit = (material: Material) => {
     setSelectedMaterial(material);
@@ -274,7 +274,7 @@ export const MaterialView: React.FC = () => {
   const paginatedMaterials = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return processedMaterials.slice(startIndex, startIndex + itemsPerPage);
-  }, [processedMaterials, currentPage]);
+  }, [processedMaterials, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(processedMaterials.length / itemsPerPage) || 1;
 
@@ -385,8 +385,8 @@ export const MaterialView: React.FC = () => {
                   </button>
                 </th>
                 <th className="py-4 px-4 font-semibold text-center w-28">Satuan</th>
-                <th className="py-4 px-4 font-semibold text-right w-28">Diajukan</th>
-                <th className="py-4 px-4 font-semibold text-right w-28">Diterima</th>
+                <th className="py-4 px-4 font-semibold text-right w-28">Pengajuan</th>
+                <th className="py-4 px-4 font-semibold text-right w-28">Surat Jalan</th>
                 <th className="py-4 px-6 font-semibold text-center w-40">Progress</th>
                 <th className="py-4 px-4 font-semibold text-center w-36">
                   <button onClick={() => handleSort('status')} className="flex items-center justify-center gap-1 mx-auto hover:text-slate-800">
@@ -394,8 +394,8 @@ export const MaterialView: React.FC = () => {
                   </button>
                 </th>
                 <th className="py-4 px-4 font-semibold text-center w-36">Tgl Terima</th>
-                <th className="py-4 px-4 font-semibold text-center w-36">Verifikasi</th>
-                <th className="py-4 px-6 font-semibold text-right w-28">Aksi</th>
+                <th className="py-4 px-4 font-semibold text-center w-36">Nota</th>
+                <th className="py-4 px-6 font-semibold text-right w-28">Edit</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">

@@ -158,7 +158,7 @@ export const PaymentView: React.FC = () => {
   };
 
   // Reset invoice form
-  const resetInvoiceForm = () => {
+  const resetInvoiceForm = React.useCallback(() => {
     setVendorId('');
     setInvoiceNumber('');
     setInvoiceDate('');
@@ -169,7 +169,7 @@ export const PaymentView: React.FC = () => {
     setInvoiceError('');
     setIsAddingVendor(false);
     setNewVendorName('');
-  };
+  }, []);
 
   // Reset payment form
   const resetPaymentForm = () => {
@@ -180,19 +180,19 @@ export const PaymentView: React.FC = () => {
     setPaymentError('');
   };
 
-  const handleOpenAddInvoice = () => {
+  const handleOpenAddInvoice = React.useCallback(() => {
     resetInvoiceForm();
     if (vendors.length > 0) setVendorId(vendors[0].id);
     setInvoiceModalMode('add');
     setIsInvoiceModalOpen(true);
-  };
+  }, [vendors, resetInvoiceForm]);
 
   useEffect(() => {
     if (openInvoiceModal) {
       handleOpenAddInvoice();
       setOpenInvoiceModal(false);
     }
-  }, [openInvoiceModal, vendors]);
+  }, [openInvoiceModal, vendors, handleOpenAddInvoice, setOpenInvoiceModal]);
 
   const handleOpenEditInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
@@ -403,7 +403,7 @@ export const PaymentView: React.FC = () => {
   const paginatedInvoices = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return processedInvoices.slice(startIndex, startIndex + itemsPerPage);
-  }, [processedInvoices, currentPage]);
+  }, [processedInvoices, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(processedInvoices.length / itemsPerPage) || 1;
 

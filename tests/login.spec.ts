@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Login Feature', () => {
   test('unauthenticated redirects to login', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('text=ONELITO KOI')).toBeVisible();
+    await expect(page.locator('text=ONELITO PROJECT').first()).toBeVisible();
     await expect(page.locator('input[placeholder="Masukkan username"]')).toBeVisible();
   });
 
@@ -20,7 +20,7 @@ test.describe('Login Feature', () => {
     await page.fill('input[placeholder="Masukkan username"]', 'admin');
     await page.fill('input[placeholder="Masukkan password"]', 'admin123');
     await page.click('button[type="submit"]');
-    await expect(page.locator('text=ONELITO KOI')).toBeVisible();
+    await expect(page.locator('text=ONELITO PROJECT').first()).toBeVisible();
     await expect(page.locator('h2:has-text("Dashboard")')).toBeVisible();
   });
 });

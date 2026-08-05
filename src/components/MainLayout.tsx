@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { AccountView } from './AccountView';
 
+import Image from 'next/image';
+
 interface MainLayoutProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -85,22 +87,22 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ activeTab, setActiveTab,
                 <Menu className="w-5 h-5" />
               </button>
             ) : (
-              <>
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <img src="/logo-onelitokoi.png" alt="Logo" className="w-7 h-7 object-contain flex-shrink-0" />
-                  <div>
-                    <h1 className="text-sm font-bold text-slate-800 leading-tight">ONELITO KOI</h1>
-                    <span className="text-[10px] text-slate-500 font-medium">Construction Project Bogor</span>
+                <>
+                  <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden">
+                    <Image src="/OnelitoCons.png" alt="Logo" width={28} height={28} className="object-contain flex-shrink-0" />
+                    <div className="overflow-hidden">
+                      <h1 className="text-sm font-bold text-slate-800 leading-tight truncate">ONELITO PROJECT</h1>
+                      <span className="text-[10px] text-slate-500 font-medium truncate block">Construction Project Bogor</span>
+                    </div>
                   </div>
-                </div>
-                <button
-                  onClick={() => setIsCollapsed(!isCollapsed)}
-                  className="p-1 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
-                  title="Tutup Sidebar"
-                >
-                  <Menu className="w-5 h-5" />
-                </button>
-              </>
+                  <button
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0 ml-auto"
+                    title="Tutup Sidebar"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                </>
             )}
           </div>
         </div>
@@ -187,12 +189,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ activeTab, setActiveTab,
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="relative w-4/5 max-w-xs h-full bg-white flex flex-col shadow-2xl z-10 touch-pan-x"
             >
-              <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
-                <div className="flex items-center gap-2">
-                  <img src="/logo-onelitokoi.png" alt="Logo" className="w-8 h-8 object-contain flex-shrink-0" />
-                  <span className="font-bold text-slate-800">ONELITO KOI</span>
-                </div>
-                <button 
+                <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <Image src="/OnelitoCons.png" alt="Logo" width={32} height={32} className="object-contain flex-shrink-0" />
+                    <span className="font-bold text-slate-800">ONELITO CONS</span>
+                  </div>
+                  <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
                 >

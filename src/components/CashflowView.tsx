@@ -946,7 +946,7 @@ export const CashflowView: React.FC = () => {
                     <th className="py-4 px-4 font-semibold text-right w-36">Debit</th>
                     <th className="py-4 px-4 font-semibold text-right w-36">Kredit</th>
                     <th className="py-4 px-4 font-semibold text-right w-40">Total Saldo</th>
-                    <th className="py-4 px-6 font-semibold text-right w-24">Aksi</th>
+                    <th className="py-4 px-6 font-semibold text-right w-24">Edit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
@@ -1083,7 +1083,7 @@ export const CashflowView: React.FC = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Rekap Pengeluaran</h3>
-                  <p className="text-[11px] text-slate-400 font-semibold">Tabel rekapitulasi kategori (Model Excel Lama)</p>
+                  <p className="text-[11px] text-slate-400 font-semibold">Tabel rekapitulasi kategori</p>
                 </div>
                 <button
                   onClick={() => {

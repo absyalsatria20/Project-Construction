@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
+import Image from 'next/image';
+
 export const LoginView: React.FC = () => {
   const { login } = useApp();
   const [username, setUsername] = useState('');
@@ -26,11 +28,11 @@ export const LoginView: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-        <div className="text-center space-y-2">
-          <img src="/logo-onelitokoi.png" alt="ONELITO KOI Logo" className="w-12 h-12 object-contain mx-auto" />
-          <h2 className="text-2xl font-bold text-slate-800">ONELITO KOI</h2>
-          <p className="text-sm text-slate-500 font-medium">Construction Project Bogor</p>
-        </div>
+          <div className="text-center space-y-2">
+            <Image src="/OnelitoCons.png" alt="ONELITO CONS Logo" width={48} height={48} className="object-contain mx-auto" />
+            <h2 className="text-2xl font-bold text-slate-800">ONELITO PROJECT</h2>
+            <p className="text-sm text-slate-500 font-medium">Construction Project Bogor</p>
+          </div>
 
         {error && (
           <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600 text-sm font-medium">

@@ -17,7 +17,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Construction Project Management System (CPMS)",
+  title: "ONELITO PROJECT",
   description: "Aplikasi administrasi proyek pembangunan modern.",
 };
 
