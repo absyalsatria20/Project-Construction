@@ -559,8 +559,8 @@ export const PaymentView: React.FC = () => {
       startY: 26,
       theme: 'striped',
       margin: { left: 10, right: 10 },
-      headStyles: { fillColor: [59, 130, 246], fontSize: 8, halign: 'center' },
-      styles: { fontSize: 7.5, valign: 'top', overflow: 'linebreak' },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 8, halign: 'center', textColor: [255, 255, 255] },
+      styles: { fontSize: 7.5, valign: 'top', overflow: 'linebreak', textColor: [0, 0, 0] },
       columnStyles: {
         0: { cellWidth: 25 },
         1: { cellWidth: 30 },

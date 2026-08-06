@@ -516,8 +516,8 @@ export const CashflowView: React.FC = () => {
       startY: 26,
       theme: 'striped',
       margin: { left: 10, right: 10 },
-      headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
-      styles: { fontSize: 7.5, valign: 'top', overflow: 'linebreak' },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 8, textColor: [255, 255, 255] },
+      styles: { fontSize: 7.5, valign: 'top', overflow: 'linebreak', textColor: [0, 0, 0] },
       columnStyles: {
         0: { cellWidth: 10, halign: 'center' },
         1: { cellWidth: 22, halign: 'center' },
@@ -643,8 +643,8 @@ export const CashflowView: React.FC = () => {
       startY: 28,
       theme: 'striped',
       margin: { left: 14, right: 14 },
-      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
-      styles: { fontSize: 9, valign: 'middle' },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9, textColor: [255, 255, 255] },
+      styles: { fontSize: 9, valign: 'middle', textColor: [0, 0, 0] },
       columnStyles: {
         0: { cellWidth: 15, halign: 'center' },
         1: { cellWidth: 90, halign: 'left' },
@@ -1694,10 +1694,10 @@ export const CashflowView: React.FC = () => {
                         if (result.deleted.length === 0) {
                           setTimeout(() => {
                             const isAllSelected = selectedCategoryIds.length === categories.length;
-                            const title = isAllSelected ? 'Gagal Menghapus Semua Kategori' : 'Gagal Dihapus';
+                            const title = isAllSelected ? 'Gagal Menghapus Kategori' : 'Gagal Dihapus';
                             const message = isAllSelected 
-                              ? `Semua kategori gagal dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`
-                              : `Kategori yang dipilih gagal dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`;
+                              ? `Semua kategori yang dipilih (${result.blocked.length}) gagal dihapus karena sedang digunakan dalam transaksi Cashflow.`
+                              : `${result.blocked.length} kategori gagal dihapus karena sedang digunakan dalam transaksi Cashflow.`;
                             
                             showAlert(title, message, 'error');
                           }, 300);
@@ -1705,7 +1705,7 @@ export const CashflowView: React.FC = () => {
                           setTimeout(() => {
                             showAlert(
                               'Sebagian Gagal Dihapus',
-                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`,
+                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan dalam transaksi Cashflow.`,
                               'info'
                             );
                           }, 300);
