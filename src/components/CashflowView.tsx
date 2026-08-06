@@ -1696,8 +1696,8 @@ export const CashflowView: React.FC = () => {
                             const isAllSelected = selectedCategoryIds.length === categories.length;
                             const title = isAllSelected ? 'Gagal Menghapus Kategori' : 'Gagal Dihapus';
                             const message = isAllSelected 
-                              ? `Semua kategori yang dipilih (${result.blocked.length}) gagal dihapus karena sedang digunakan dalam transaksi Cashflow.`
-                              : `${result.blocked.length} kategori gagal dihapus karena sedang digunakan dalam transaksi Cashflow.`;
+                              ? `Semua kategori yang dipilih (${result.blocked.length}) gagal dihapus karena Kategori sedang digunakan.`
+                              : `${result.blocked.length} kategori gagal dihapus karena Kategori sedang digunakan.`;
                             
                             showAlert(title, message, 'error');
                           }, 300);
