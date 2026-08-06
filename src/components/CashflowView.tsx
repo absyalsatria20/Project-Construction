@@ -1376,31 +1376,6 @@ export const CashflowView: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                    {isBulkCategoryMode && selectedCategoryIds.length > 0 && (
-                      <button
-                        onClick={() => {
-                          showConfirm(
-                            'Hapus Kategori Terpilih',
-                            `Apakah Anda yakin ingin menghapus ${selectedCategoryIds.length} kategori terpilih? Kategori yang sedang digunakan dalam transaksi tidak akan dihapus.`,
-                            () => {
-                              const result = deleteCategories(selectedCategoryIds);
-                              setSelectedCategoryIds([]);
-                              if (result.blocked.length > 0) {
-                                showAlert(
-                                  'Sebagian Gagal Dihapus',
-                                  `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
-                                  'info'
-                                );
-                              }
-                            }
-                          );
-                        }}
-                        className="w-full h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center justify-center gap-1.5"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Hapus {selectedCategoryIds.length} Kategori
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : (
@@ -1676,6 +1651,67 @@ export const CashflowView: React.FC = () => {
               >
                 <Trash2 className="w-4 h-4" />
                 Hapus Banyak
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Bulk Action Bar for Categories */}
+      <AnimatePresence>
+        {isBulkCategoryMode && selectedCategoryIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 100, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 100, x: '-50%' }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="fixed left-1/2 z-[999] w-[calc(100vw-32px)] max-w-md bg-white p-4 rounded-[20px] shadow-[0_12px_32px_rgba(0,0,0,0.15)] border border-slate-100 flex flex-col gap-3"
+            style={{ bottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+          >
+            <div className="flex items-center gap-2 text-slate-800">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600">
+                <Check className="w-3.5 h-3.5" />
+              </span>
+              <span className="text-sm font-bold">{selectedCategoryIds.length} kategori dipilih</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedCategoryIds([])}
+                className="flex-1 h-12 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-[14px] text-sm font-bold transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  showConfirm(
+                    'Hapus Kategori Terpilih',
+                    `Apakah Anda yakin ingin menghapus ${selectedCategoryIds.length} kategori terpilih? Kategori yang sedang digunakan dalam transaksi tidak akan dihapus.`,
+                    () => {
+                      const result = deleteCategories(selectedCategoryIds);
+                      setSelectedCategoryIds([]);
+                      
+                      if (result.blocked.length > 0) {
+                        if (result.deleted.length === 0) {
+                          showAlert(
+                            'Gagal Dihapus',
+                            'Gagal menghapus! Semua kategori yang dipilih sedang digunakan dalam transaksi Cashflow.',
+                            'error'
+                          );
+                        } else {
+                          showAlert(
+                            'Sebagian Gagal Dihapus',
+                            `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
+                            'info'
+                          );
+                        }
+                      }
+                    }
+                  );
+                }}
+                className="flex-1 h-12 bg-red-600 hover:bg-red-700 text-white rounded-[14px] text-sm font-bold transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm shadow-red-500/10"
+              >
+                <Trash2 className="w-4 h-4" />
+                Hapus Kategori
               </button>
             </div>
           </motion.div>
