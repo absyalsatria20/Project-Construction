@@ -394,7 +394,7 @@ export const CashflowView: React.FC = () => {
       left: { style: 'thin' }, right: { style: 'thin' }
     };
 
-    const titleRow = ws.addRow(['LAPORAN CASHFLOW PROYEK']);
+    const titleRow = ws.addRow(['LAPORAN PENGELUARAN KEBUN CIJERUK']);
     titleRow.font = { name: 'Calibri', bold: true, size: 16 };
     titleRow.height = 28;
     ws.mergeCells('A1:H1');
@@ -487,7 +487,7 @@ export const CashflowView: React.FC = () => {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.text('LAPORAN CASHFLOW PROYEK', 10, 15);
+    doc.text('LAPORAN PENGELUARAN KEBUN CIJERUK', 10, 15);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 10, 21);
