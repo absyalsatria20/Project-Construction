@@ -1692,17 +1692,21 @@ export const CashflowView: React.FC = () => {
                       
                       if (result.blocked.length > 0) {
                         if (result.deleted.length === 0) {
-                          showAlert(
-                            'Gagal Dihapus',
-                            'Gagal menghapus! Semua kategori yang dipilih sedang digunakan dalam transaksi Cashflow.',
-                            'error'
-                          );
+                          setTimeout(() => {
+                            showAlert(
+                              'Gagal Dihapus',
+                              'Gagal menghapus! Semua kategori yang dipilih sedang digunakan dalam transaksi Cashflow.',
+                              'error'
+                            );
+                          }, 300);
                         } else {
-                          showAlert(
-                            'Sebagian Gagal Dihapus',
-                            `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
-                            'info'
-                          );
+                          setTimeout(() => {
+                            showAlert(
+                              'Sebagian Gagal Dihapus',
+                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
+                              'info'
+                            );
+                          }, 300);
                         }
                       }
                     }
