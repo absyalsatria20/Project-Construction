@@ -39,6 +39,7 @@ export const CashflowView: React.FC = () => {
     deleteCashflow,
     addCategory,
     deleteCategory,
+    deleteCategories,
     updateCategory,
     itemsPerPage,
     setItemsPerPage,
@@ -112,6 +113,8 @@ export const CashflowView: React.FC = () => {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [frontpageNewCategoryName, setFrontpageNewCategoryName] = useState('');
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [isBulkCategoryMode, setIsBulkCategoryMode] = useState(false);
 
   // Form State
   const [transactionDate, setTransactionDate] = useState('');
@@ -548,6 +551,115 @@ export const CashflowView: React.FC = () => {
     });
 
     doc.save('Laporan_Pengeluaran_Kebun_Cijeruk.pdf');
+  };
+
+  const exportKategoriExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('Rekap Pengeluaran', {
+      pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+    });
+
+    const headerBg: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    const headerFont: Partial<ExcelJS.Font> = { name: 'Calibri', bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    const dataFont: Partial<ExcelJS.Font> = { name: 'Calibri', bold: false, size: 10 };
+    const boldFont: Partial<ExcelJS.Font> = { name: 'Calibri', bold: true, size: 10 };
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin' }, bottom: { style: 'thin' },
+      left: { style: 'thin' }, right: { style: 'thin' }
+    };
+
+    const titleRow = ws.addRow(['REKAP PENGELUARAN PER KATEGORI']);
+    titleRow.font = { name: 'Calibri', bold: true, size: 14 };
+    titleRow.height = 24;
+    ws.mergeCells('A1:C1');
+
+    const dateRow = ws.addRow([`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`]);
+    dateRow.font = { name: 'Calibri', size: 10 };
+    ws.mergeCells('A2:C2');
+
+    ws.addRow([]);
+
+    const hRow = ws.addRow(['No', 'Kategori', 'Total Pengeluaran']);
+    hRow.height = 24;
+    hRow.eachCell((cell) => {
+      cell.fill = headerBg;
+      cell.font = headerFont;
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = thinBorder;
+    });
+
+    ws.getColumn(1).width = 8;
+    ws.getColumn(2).width = 35;
+    ws.getColumn(3).width = 25;
+
+    categorySummaryList.forEach((item, idx) => {
+      const row = ws.addRow([idx + 1, item.categoryName, formatRupiah(item.total)]);
+      row.eachCell((cell, colNumber) => {
+        cell.font = dataFont;
+        cell.border = thinBorder;
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: colNumber === 1 ? 'center' : colNumber === 3 ? 'right' : 'left'
+        };
+      });
+    });
+
+    const totalRow = ws.addRow(['', 'Grand Total', formatRupiah(grandTotalSummary)]);
+    totalRow.eachCell((cell, colNumber) => {
+      cell.font = boldFont;
+      cell.border = thinBorder;
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: colNumber === 3 ? 'right' : colNumber === 1 ? 'center' : 'left'
+      };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Rekap_Pengeluaran_Kategori.xlsx');
+  };
+
+  const exportKategoriPDF = () => {
+    const doc = new jsPDF({ orientation: 'portrait', format: 'a4', unit: 'mm' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('REKAP PENGELUARAN PER KATEGORI', 14, 15);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
+
+    const headers = [['No', 'Kategori', 'Total Pengeluaran']];
+    const data = categorySummaryList.map((item, idx) => [
+      (idx + 1).toString(),
+      item.categoryName,
+      formatRupiah(item.total)
+    ]);
+    data.push(['', 'Grand Total', formatRupiah(grandTotalSummary)]);
+
+    autoTable(doc, {
+      head: headers,
+      body: data,
+      startY: 28,
+      theme: 'striped',
+      margin: { left: 14, right: 14 },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 9, valign: 'middle' },
+      columnStyles: {
+        0: { cellWidth: 15, halign: 'center' },
+        1: { cellWidth: 90, halign: 'left' },
+        2: { cellWidth: 50, halign: 'right' }
+      },
+      didParseCell: (cellData) => {
+        const isLastRow = cellData.row.index === data.length - 1;
+        if (isLastRow && cellData.section === 'body') {
+          cellData.cell.styles.fontStyle = 'bold';
+          cellData.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    });
+
+    doc.save('Rekap_Pengeluaran_Kategori.pdf');
   };
 
   // Import Excel
@@ -1087,21 +1199,41 @@ export const CashflowView: React.FC = () => {
         <div className="w-full">
           {(!categoryFilter || categoryFilter === '') ? (
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Rekap Pengeluaran</h3>
                   <p className="text-[11px] text-slate-400 font-semibold">Tabel rekapitulasi kategori</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setIsManagingCategories(!isManagingCategories);
-                    setEditingCategoryId(null);
-                    setFrontpageNewCategoryName('');
-                  }}
-                  className="text-xs text-blue-600 font-bold hover:underline"
-                >
-                  {isManagingCategories ? 'Selesai' : 'Kelola'}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={exportKategoriExcel}
+                    className="inline-flex items-center justify-center h-8 px-3 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 text-xs font-semibold transition-all gap-1.5"
+                    title="Export Excel Rekap"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-green-600" />
+                    <span className="hidden sm:inline">Excel</span>
+                  </button>
+                  <button
+                    onClick={exportKategoriPDF}
+                    className="inline-flex items-center justify-center h-8 px-3 border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 text-xs font-semibold transition-all gap-1.5"
+                    title="Export PDF Rekap"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-red-500" />
+                    <span className="hidden sm:inline">PDF</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsManagingCategories(!isManagingCategories);
+                      setEditingCategoryId(null);
+                      setFrontpageNewCategoryName('');
+                      setIsBulkCategoryMode(false);
+                      setSelectedCategoryIds([]);
+                    }}
+                    className="text-xs text-blue-600 font-bold hover:underline"
+                  >
+                    {isManagingCategories ? 'Selesai' : 'Kelola'}
+                  </button>
+                </div>
               </div>
 
               {isManagingCategories ? (
@@ -1135,10 +1267,56 @@ export const CashflowView: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Daftar Kategori</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Daftar Kategori</p>
+                      <button
+                        onClick={() => {
+                          setIsBulkCategoryMode(!isBulkCategoryMode);
+                          setSelectedCategoryIds([]);
+                        }}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-colors ${
+                          isBulkCategoryMode
+                            ? 'bg-amber-50 text-amber-700 border border-amber-300'
+                            : 'text-blue-600 hover:bg-blue-50'
+                        }`}
+                      >
+                        {isBulkCategoryMode ? 'Batal Pilih' : 'Pilih Banyak'}
+                      </button>
+                    </div>
+                    {isBulkCategoryMode && categories.length > 0 && (
+                      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={categories.length > 0 && categories.every(c => selectedCategoryIds.includes(c.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCategoryIds(categories.map(c => c.id));
+                            } else {
+                              setSelectedCategoryIds([]);
+                            }
+                          }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                        />
+                        <span className="font-semibold">Pilih Semua</span>
+                      </label>
+                    )}
                     <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden text-xs">
                       {categories.map((c) => (
-                        <div key={c.id} className="p-2 flex justify-between items-center hover:bg-slate-50/50">
+                        <div key={c.id} className={`p-2 flex items-center gap-2 hover:bg-slate-50/50 ${selectedCategoryIds.includes(c.id) ? 'bg-blue-50/40' : ''}`}>
+                          {isBulkCategoryMode && (
+                            <input
+                              type="checkbox"
+                              checked={selectedCategoryIds.includes(c.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCategoryIds([...selectedCategoryIds, c.id]);
+                                } else {
+                                  setSelectedCategoryIds(selectedCategoryIds.filter(id => id !== c.id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 flex-shrink-0"
+                            />
+                          )}
                           {editingCategoryId === c.id ? (
                             <div className="flex gap-2 w-full">
                               <input
@@ -1165,37 +1343,64 @@ export const CashflowView: React.FC = () => {
                               </button>
                             </div>
                           ) : (
-                            <>
-                              <span className="font-semibold text-slate-700">{c.name}</span>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => {
-                                    setEditingCategoryId(c.id);
-                                    setEditingCategoryName(c.name);
-                                  }}
-                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    showConfirm('Hapus Kategori', `Hapus kategori "${c.name}"?`, () => {
-                                      const success = deleteCategory(c.id);
-                                      if (!success) {
-                                        showAlert('Gagal Menghapus', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Cashflow.', 'error');
-                                      }
-                                    });
-                                  }}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </>
+                            <div className="flex justify-between items-center w-full min-w-0">
+                              <span className="font-semibold text-slate-700 truncate">{c.name}</span>
+                              {!isBulkCategoryMode && (
+                                <div className="flex gap-1 flex-shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCategoryId(c.id);
+                                      setEditingCategoryName(c.name);
+                                    }}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      showConfirm('Hapus Kategori', `Hapus kategori "${c.name}"?`, () => {
+                                        const success = deleteCategory(c.id);
+                                        if (!success) {
+                                          showAlert('Gagal Menghapus', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Cashflow.', 'error');
+                                        }
+                                      });
+                                    }}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}
                     </div>
+                    {isBulkCategoryMode && selectedCategoryIds.length > 0 && (
+                      <button
+                        onClick={() => {
+                          showConfirm(
+                            'Hapus Kategori Terpilih',
+                            `Apakah Anda yakin ingin menghapus ${selectedCategoryIds.length} kategori terpilih? Kategori yang sedang digunakan dalam transaksi tidak akan dihapus.`,
+                            () => {
+                              const result = deleteCategories(selectedCategoryIds);
+                              setSelectedCategoryIds([]);
+                              if (result.blocked.length > 0) {
+                                showAlert(
+                                  'Sebagian Gagal Dihapus',
+                                  `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
+                                  'info'
+                                );
+                              }
+                            }
+                          );
+                        }}
+                        className="w-full h-10 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center justify-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Hapus {selectedCategoryIds.length} Kategori
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (

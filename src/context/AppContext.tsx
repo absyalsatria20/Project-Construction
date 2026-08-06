@@ -110,6 +110,7 @@ interface AppContextType {
   addCategory: (category: Omit<Category, 'id'>) => Category;
   updateCategory: (id: string, category: Partial<Category>) => void;
   deleteCategory: (id: string) => boolean;
+  deleteCategories: (ids: string[]) => { deleted: string[]; blocked: string[] };
 
   // SubCategory actions
   addSubCategory: (sub: Omit<SubCategory, 'id'>) => SubCategory;
@@ -707,6 +708,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     showToast('success', 'Kategori berhasil dihapus');
     return true;
+  };
+
+  const deleteCategories = (ids: string[]): { deleted: string[]; blocked: string[] } => {
+    const deleted: string[] = [];
+    const blocked: string[] = [];
+
+    ids.forEach(id => {
+      const inUse = cashflows.some(c => c.categoryId === id);
+      if (inUse) {
+        const cat = categories.find(c => c.id === id);
+        blocked.push(cat?.name || id);
+      } else {
+        deleted.push(id);
+      }
+    });
+
+    if (deleted.length > 0) {
+      const updated = categories.filter(c => !deleted.includes(c.id));
+      const updatedSub = subCategories.filter(sc => !deleted.includes(sc.categoryId));
+      setCategories(updated);
+      setSubCategories(updatedSub);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        handleSupabaseWrite(
+          () => supabase.from('categories').delete().in('id', deleted),
+          { table: 'categories', method: 'delete', match: { id: deleted } }
+        );
+      } else {
+        save('cpms_categories', updated);
+        save('cpms_subcategories', updatedSub);
+      }
+    }
+
+    if (deleted.length > 0) {
+      showToast('success', `${deleted.length} kategori berhasil dihapus`);
+    }
+
+    return { deleted, blocked };
   };
 
   // SubCategory actions
@@ -1511,6 +1549,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addCategory,
         updateCategory,
         deleteCategory,
+        deleteCategories,
         addSubCategory,
         updateSubCategory,
         deleteSubCategory,
