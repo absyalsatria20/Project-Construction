@@ -1693,17 +1693,19 @@ export const CashflowView: React.FC = () => {
                       if (result.blocked.length > 0) {
                         if (result.deleted.length === 0) {
                           setTimeout(() => {
-                            showAlert(
-                              'Gagal Dihapus',
-                              'Gagal menghapus! Semua kategori yang dipilih sedang digunakan dalam transaksi Cashflow.',
-                              'error'
-                            );
+                            const isAllSelected = selectedCategoryIds.length === categories.length;
+                            const title = isAllSelected ? 'Gagal Menghapus Semua Kategori' : 'Gagal Dihapus';
+                            const message = isAllSelected 
+                              ? `Semua kategori gagal dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`
+                              : `Kategori yang dipilih gagal dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`;
+                            
+                            showAlert(title, message, 'error');
                           }, 300);
                         } else {
                           setTimeout(() => {
                             showAlert(
                               'Sebagian Gagal Dihapus',
-                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan: ${result.blocked.join(', ')}`,
+                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan dalam transaksi Cashflow:\n\n${result.blocked.join(', ')}`,
                               'info'
                             );
                           }, 300);
