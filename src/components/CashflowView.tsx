@@ -394,7 +394,7 @@ export const CashflowView: React.FC = () => {
       left: { style: 'thin' }, right: { style: 'thin' }
     };
 
-    const titleRow = ws.addRow(['LAPORAN CASHFLOW PROYEK']);
+    const titleRow = ws.addRow(['LAPORAN PENGELUARAN KEBUN CIJERUK']);
     titleRow.font = { name: 'Calibri', bold: true, size: 16 };
     titleRow.height = 28;
     ws.mergeCells('A1:H1');
@@ -478,7 +478,7 @@ export const CashflowView: React.FC = () => {
     ws.views = [{ state: 'frozen', ySplit: 4 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Laporan_Cashflow_Proyek.xlsx');
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Laporan_Pengeluaran_Kebun_Cijeruk.xlsx');
   };
 
   // Export PDF
@@ -487,7 +487,7 @@ export const CashflowView: React.FC = () => {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.text('LAPORAN CASHFLOW PROYEK', 10, 15);
+    doc.text('LAPORAN PENGELUARAN KEBUN CIJERUK', 10, 15);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 10, 21);
@@ -547,7 +547,7 @@ export const CashflowView: React.FC = () => {
       }
     });
 
-    doc.save('Laporan_Cashflow_Proyek.pdf');
+    doc.save('Laporan_Pengeluaran_Kebun_Cijeruk.pdf');
   };
 
   // Import Excel
