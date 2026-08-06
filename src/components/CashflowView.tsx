@@ -342,8 +342,15 @@ export const CashflowView: React.FC = () => {
       result = result.filter(cf => cf.transactionDate <= dateFilterEnd);
     }
 
-    // Sorting berdasarkan rowIndex agar identik dengan baris Excel yang diimport
+    // Sort by Date primarily, then by rowIndex for identical dates
     result.sort((a, b) => {
+      const dateA = new Date(a.transactionDate).getTime();
+      const dateB = new Date(b.transactionDate).getTime();
+      
+      if (dateA !== dateB) {
+        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+      
       const rowA = a.rowIndex || 0;
       const rowB = b.rowIndex || 0;
       return sortDirection === 'asc' ? rowA - rowB : rowB - rowA;
