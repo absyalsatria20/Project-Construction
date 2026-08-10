@@ -6,6 +6,7 @@ import { DashboardView } from '@/components/DashboardView';
 import { MaterialView } from '@/components/MaterialView';
 import { PaymentView } from '@/components/PaymentView';
 import { CashflowView } from '@/components/CashflowView';
+import { PettyCashView } from '@/components/PettyCashView';
 import { LoginView } from '@/components/LoginView';
 import { useApp } from '@/context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +21,7 @@ export default function Home() {
     const handleUrlChange = () => {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab && ['dashboard', 'material', 'payment', 'cashflow'].includes(tab)) {
+      if (tab && ['dashboard', 'material', 'payment', 'cashflow', 'pettycash'].includes(tab)) {
         setActiveTabState(tab);
       } else {
         setActiveTabState('dashboard');
@@ -53,6 +54,8 @@ export default function Home() {
         return <PaymentView />;
       case 'cashflow':
         return <CashflowView />;
+      case 'pettycash':
+        return <PettyCashView />;
       default:
         return <DashboardView setActiveTab={setActiveTab} />;
     }

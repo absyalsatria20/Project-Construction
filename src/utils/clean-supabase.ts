@@ -29,6 +29,7 @@ async function clean() {
   console.log('Membersihkan data di database Supabase...');
   try {
     await supabase.from('cashflows').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('petty_cashes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabase.from('materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');

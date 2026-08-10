@@ -75,6 +75,21 @@ export interface Cashflow {
   rowIndex?: number;
 }
 
+export interface PettyCash {
+  id: string;
+  transactionDate: string;
+  transactionType: 'Dana Masuk' | 'Pengeluaran';
+  categoryId?: string;
+  subcategoryId?: string;
+  vendorId?: string;
+  description: string;
+  amount: number;
+  runningBalance?: number;
+  note: string;
+  createdAt?: number;
+  rowIndex?: number;
+}
+
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'info' | 'warning';
@@ -89,6 +104,7 @@ interface AppContextType {
   invoices: Invoice[];
   payments: Payment[];
   cashflows: Cashflow[];
+  pettyCashes: PettyCash[];
   toasts: Toast[];
   showToast: (type: 'success' | 'error' | 'info' | 'warning', message: string) => void;
   removeToast: (id: string) => void;
@@ -138,6 +154,13 @@ interface AppContextType {
   updateCashflow: (id: string, cashflow: Partial<Cashflow>) => void;
   deleteCashflow: (id: string) => void;
   deleteCashflows: (ids: string[]) => void;
+
+  // PettyCash actions
+  addPettyCash: (pettyCash: Omit<PettyCash, 'id' | 'runningBalance'>) => void;
+  addPettyCashes: (pettyCashList: Omit<PettyCash, 'id' | 'runningBalance'>[]) => void;
+  updatePettyCash: (id: string, pettyCash: Partial<PettyCash>) => void;
+  deletePettyCash: (id: string) => void;
+  deletePettyCashes: (ids: string[]) => void;
 
   // Global Items Per Page
   itemsPerPage: number;
@@ -226,6 +249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [cashflows, setCashflows] = useState<Cashflow[]>([]);
+  const [pettyCashes, setPettyCashes] = useState<PettyCash[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const removeToast = useCallback((id: string) => {
@@ -353,7 +377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchSupabaseData = async () => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
     try {
-      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes, aRes] = await Promise.all([
+      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes, pcRes, aRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
         supabase.from('categories').select('*').order('name'),
         supabase.from('subcategories').select('*').order('name'),
@@ -361,6 +385,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('invoices').select('*'),
         supabase.from('payments').select('*'),
         supabase.from('cashflows').select('*'),
+        supabase.from('petty_cashes').select('*'),
         supabase.from('accounts').select('*').eq('id', 'primary').maybeSingle()
       ]);
 
@@ -422,6 +447,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           rowIndex: cf.row_index !== null && cf.row_index !== undefined ? Number(cf.row_index) : undefined
         })));
       }
+      if (pcRes.data) {
+        setPettyCashes(pcRes.data.map((pc) => ({
+          id: pc.id,
+          transactionDate: pc.transaction_date,
+          transactionType: pc.transaction_type as 'Dana Masuk' | 'Pengeluaran',
+          categoryId: pc.category_id || undefined,
+          subcategoryId: pc.subcategory_id || undefined,
+          vendorId: pc.vendor_id || undefined,
+          description: pc.description,
+          amount: Number(pc.amount),
+          note: pc.note || '',
+          createdAt: new Date(pc.created_at).getTime(),
+          rowIndex: pc.row_index !== null && pc.row_index !== undefined ? Number(pc.row_index) : undefined
+        })));
+      }
     } catch (err) {
       console.error("Error fetching from Supabase", err);
     }
@@ -464,6 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const localInvoices = localStorage.getItem('cpms_invoices');
       const localPayments = localStorage.getItem('cpms_payments');
       const localCashflows = localStorage.getItem('cpms_cashflows');
+      const localPettyCashes = localStorage.getItem('cpms_petty_cashes');
 
       if (localVendors) setVendors(JSON.parse(localVendors));
       else setVendors(initialVendors);
@@ -485,6 +526,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (localCashflows) setCashflows(JSON.parse(localCashflows));
       else setCashflows(initialCashflows);
+
+      if (localPettyCashes) setPettyCashes(JSON.parse(localPettyCashes));
     }
   }, []);
 
@@ -1325,6 +1368,170 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', `${ids.length} transaksi cashflow berhasil dihapus`);
   };
 
+  // PettyCash
+  const addPettyCash = (pettyCash: Omit<PettyCash, 'id' | 'runningBalance'> & { rowIndex?: number }) => {
+    const newId = generateUUID();
+    const nextRowIndex = pettyCash.rowIndex !== undefined 
+      ? pettyCash.rowIndex 
+      : (pettyCashes.length > 0 ? Math.max(...pettyCashes.map(pc => pc.rowIndex || 0)) + 1 : 1);
+
+    const newPc: PettyCash = { 
+      ...pettyCash, 
+      id: newId,
+      createdAt: Date.now(),
+      rowIndex: nextRowIndex
+    };
+    const updated = [...pettyCashes, newPc];
+    setPettyCashes(updated);
+    save('cpms_petty_cashes', updated);
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      handleSupabaseWrite(
+        () => supabase.from('petty_cashes').insert([{
+          id: newId,
+          transaction_date: pettyCash.transactionDate,
+          transaction_type: pettyCash.transactionType,
+          category_id: pettyCash.categoryId || null,
+          subcategory_id: pettyCash.subcategoryId || null,
+          vendor_id: pettyCash.vendorId || null,
+          description: pettyCash.description,
+          amount: pettyCash.amount,
+          note: pettyCash.note,
+          row_index: nextRowIndex
+        }]),
+        {
+          table: 'petty_cashes',
+          method: 'insert',
+          payload: {
+            id: newId,
+            transaction_date: pettyCash.transactionDate,
+            transaction_type: pettyCash.transactionType,
+            category_id: pettyCash.categoryId || null,
+            subcategory_id: pettyCash.subcategoryId || null,
+            vendor_id: pettyCash.vendorId || null,
+            description: pettyCash.description,
+            amount: pettyCash.amount,
+            note: pettyCash.note,
+            row_index: nextRowIndex
+          }
+        }
+      ).then(() => {
+        fetchSupabaseData();
+      });
+    }
+    showToast('success', 'Transaksi petty cash berhasil ditambahkan');
+  };
+
+  const addPettyCashes = async (pettyCashList: (Omit<PettyCash, 'id' | 'runningBalance'> & { rowIndex?: number })[]) => {
+    const baseRowIndex = pettyCashes.length > 0 ? Math.max(...pettyCashes.map(pc => pc.rowIndex || 0)) : 0;
+    const newItems = pettyCashList.map((pc, index) => {
+      const nextIndex = pc.rowIndex !== undefined ? pc.rowIndex : baseRowIndex + index + 1;
+      return {
+        ...pc,
+        id: generateUUID(),
+        createdAt: Date.now() + index,
+        rowIndex: nextIndex
+      };
+    });
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payloads = newItems.map(pc => ({
+        id: pc.id,
+        transaction_date: pc.transactionDate,
+        transaction_type: pc.transactionType,
+        category_id: pc.categoryId || null,
+        subcategory_id: pc.subcategoryId || null,
+        vendor_id: pc.vendorId || null,
+        description: pc.description,
+        amount: pc.amount,
+        note: pc.note,
+        row_index: pc.rowIndex
+      }));
+
+      handleSupabaseWrite(
+        () => supabase.from('petty_cashes').insert(payloads),
+        {
+          table: 'petty_cashes',
+          method: 'insert',
+          payload: payloads
+        }
+      ).then(() => {
+        fetchSupabaseData();
+        showToast('success', `Berhasil mengimpor ${pettyCashList.length} transaksi petty cash ke database`);
+      });
+    } else {
+      const updated = [...pettyCashes, ...newItems];
+      setPettyCashes(updated);
+      save('cpms_petty_cashes', updated);
+      showToast('success', `Berhasil mengimpor ${pettyCashList.length} transaksi petty cash`);
+    }
+  };
+
+  const updatePettyCash = (id: string, pettyCash: Partial<PettyCash>) => {
+    const updated = pettyCashes.map(pc => pc.id === id ? { ...pc, ...pettyCash } : pc);
+    setPettyCashes(updated);
+    save('cpms_petty_cashes', updated);
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (pettyCash.transactionDate !== undefined) payload.transaction_date = pettyCash.transactionDate;
+      if (pettyCash.transactionType !== undefined) payload.transaction_type = pettyCash.transactionType;
+      if (pettyCash.categoryId !== undefined) payload.category_id = pettyCash.categoryId || null;
+      if (pettyCash.subcategoryId !== undefined) payload.subcategory_id = pettyCash.subcategoryId || null;
+      if (pettyCash.vendorId !== undefined) payload.vendor_id = pettyCash.vendorId || null;
+      if (pettyCash.description !== undefined) payload.description = pettyCash.description;
+      if (pettyCash.amount !== undefined) payload.amount = pettyCash.amount;
+      if (pettyCash.note !== undefined) payload.note = pettyCash.note;
+
+      handleSupabaseWrite(
+        () => supabase.from('petty_cashes').update(payload).eq('id', id),
+        {
+          table: 'petty_cashes',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
+    }
+    showToast('success', 'Transaksi petty cash berhasil diperbarui');
+  };
+
+  const deletePettyCash = (id: string) => {
+    const updated = pettyCashes.filter(pc => pc.id !== id);
+    setPettyCashes(updated);
+    save('cpms_petty_cashes', updated);
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      handleSupabaseWrite(
+        () => supabase.from('petty_cashes').delete().eq('id', id),
+        {
+          table: 'petty_cashes',
+          method: 'delete',
+          match: { id }
+        }
+      );
+    }
+    showToast('success', 'Transaksi petty cash berhasil dihapus');
+  };
+
+  const deletePettyCashes = (ids: string[]) => {
+    const updated = pettyCashes.filter(pc => !ids.includes(pc.id));
+    setPettyCashes(updated);
+    save('cpms_petty_cashes', updated);
+
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      handleSupabaseWrite(
+        () => supabase.from('petty_cashes').delete().in('id', ids),
+        {
+          table: 'petty_cashes',
+          method: 'delete',
+          match: { id: ids }
+        }
+      );
+    }
+    showToast('success', `${ids.length} transaksi petty cash berhasil dihapus`);
+  };
+
   // Hitung running balance secara berurutan berdasarkan rowIndex agar stabil dan sesuai urutan baris import Excel
   const sortedCashflows = [...cashflows].sort((a, b) => {
     const rowA = a.rowIndex || 0;
@@ -1343,6 +1550,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { ...cf, runningBalance: currentBalance };
   });
 
+  const sortedPettyCashes = [...pettyCashes].sort((a, b) => {
+    const rowA = a.rowIndex || 0;
+    const rowB = b.rowIndex || 0;
+    if (rowA !== rowB) return rowA - rowB;
+    return a.id.localeCompare(b.id);
+  });
+
+  let currentPcBalance = 0;
+  const pettyCashesWithBalance = sortedPettyCashes.map(pc => {
+    if (pc.transactionType === 'Dana Masuk') {
+      currentPcBalance += pc.amount;
+    } else {
+      currentPcBalance -= pc.amount;
+    }
+    return { ...pc, runningBalance: currentPcBalance };
+  });
+
   // Urutkan kembali sesuai default (misal terbaru di atas untuk tabel, tapi biarkan array utama ter-update)
   // Untuk cashflows state di UI, kita kirimkan data dengan running balance yang sudah dihitung.
   
@@ -1354,7 +1578,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       materials,
       invoices,
       payments,
-      cashflows
+      cashflows,
+      pettyCashes
     };
     return JSON.stringify(data);
   };
@@ -1374,6 +1599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (parsed.invoices) setInvoices(parsed.invoices);
       if (parsed.payments) setPayments(parsed.payments);
       if (parsed.cashflows) setCashflows(parsed.cashflows);
+      if (parsed.pettyCashes) setPettyCashes(parsed.pettyCashes);
 
       if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
         // Upload to Supabase in background
@@ -1381,6 +1607,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             // Delete old data from Supabase sequentially to avoid race conditions or double triggers
             await supabase.from('cashflows').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await supabase.from('petty_cashes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await supabase.from('materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -1486,6 +1713,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const { error } = await supabase.from('cashflows').upsert(payloads);
               if (error) throw new Error(`Cashflows: ${error.message}`);
             }
+            if (parsed.pettyCashes) {
+              const payloads = parsed.pettyCashes.map((pc: PettyCash, idx: number) => ({
+                id: getOrGenerateUUID(pc.id),
+                transaction_date: pc.transactionDate,
+                transaction_type: pc.transactionType,
+                category_id: pc.categoryId || null,
+                subcategory_id: pc.subcategoryId || null,
+                vendor_id: pc.vendorId ? getOrGenerateUUID(pc.vendorId) : null,
+                description: pc.description,
+                amount: pc.amount,
+                note: pc.note,
+                row_index: pc.rowIndex !== undefined ? pc.rowIndex : idx + 1
+              }));
+              const { error } = await supabase.from('petty_cashes').upsert(payloads);
+              if (error) throw new Error(`Petty Cashes: ${error.message}`);
+            }
             showToast('success', 'Semua data berhasil di-upload ke Supabase');
             fetchSupabaseData();
             isImporting = false;
@@ -1513,6 +1756,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           save('cpms_cashflows', cashflowsWithIndex);
           setCashflows(cashflowsWithIndex);
         }
+        if (parsed.pettyCashes) {
+          const pettyCashesWithIndex = parsed.pettyCashes.map((pc: PettyCash, idx: number) => ({
+            ...pc,
+            rowIndex: pc.rowIndex !== undefined ? pc.rowIndex : idx + 1
+          }));
+          save('cpms_petty_cashes', pettyCashesWithIndex);
+          setPettyCashes(pettyCashesWithIndex);
+        }
         showToast('success', 'Semua data berhasil di-import ke browser local');
         isImporting = false;
       }
@@ -1534,6 +1785,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         invoices,
         payments,
         cashflows: cashflowsWithBalance,
+        pettyCashes: pettyCashesWithBalance,
         toasts,
         showToast,
         removeToast,
@@ -1569,6 +1821,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCashflow,
         deleteCashflow,
         deleteCashflows,
+        addPettyCash,
+        addPettyCashes,
+        updatePettyCash,
+        deletePettyCash,
+        deletePettyCashes,
         itemsPerPage,
         setItemsPerPage,
         isAuthenticated,

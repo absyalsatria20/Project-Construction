@@ -10,7 +10,8 @@ import {
   Landmark, 
   Menu, 
   X,
-  LogOut
+  LogOut,
+  Wallet
 } from 'lucide-react';
 import { AccountView } from './AccountView';
 
@@ -47,6 +48,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ activeTab, setActiveTab,
     { id: 'material', label: 'Monitoring Material', icon: Hammer },
     { id: 'payment', label: 'Rekap Pembayaran', icon: CreditCard },
     { id: 'cashflow', label: 'Cashflow', icon: Landmark },
+    { id: 'pettycash', label: 'Petty Cash', icon: Wallet },
   ];
 
   return (
