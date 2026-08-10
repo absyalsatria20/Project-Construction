@@ -22,6 +22,14 @@ export interface Category {
   active: boolean;
 }
 
+export interface PettyCashCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  active: boolean;
+}
+
 export interface SubCategory {
   id: string;
   categoryId: string;
@@ -96,9 +104,10 @@ export interface Toast {
   message: string;
 }
 
-interface AppContextType {
+  interface AppContextType {
   vendors: Vendor[];
   categories: Category[];
+  pettyCashCategories: PettyCashCategory[];
   subCategories: SubCategory[];
   materials: Material[];
   invoices: Invoice[];
@@ -127,6 +136,12 @@ interface AppContextType {
   updateCategory: (id: string, category: Partial<Category>) => void;
   deleteCategory: (id: string) => boolean;
   deleteCategories: (ids: string[]) => { deleted: string[]; blocked: string[] };
+
+  // PettyCashCategory actions
+  addPettyCashCategory: (category: Omit<PettyCashCategory, 'id'>) => PettyCashCategory;
+  updatePettyCashCategory: (id: string, category: Partial<PettyCashCategory>) => void;
+  deletePettyCashCategory: (id: string) => boolean;
+  deletePettyCashCategories: (ids: string[]) => { deleted: string[]; blocked: string[] };
 
   // SubCategory actions
   addSubCategory: (sub: Omit<SubCategory, 'id'>) => SubCategory;
@@ -192,6 +207,13 @@ const initialCategories: Category[] = [
   { id: 'c4', name: 'Adm Bank', icon: 'CreditCard', color: '#6b7280', active: true }
 ];
 
+const initialPettyCashCategories: PettyCashCategory[] = [
+  { id: 'pc1', name: 'Operasional', icon: 'Settings', color: '#10b981', active: true },
+  { id: 'pc2', name: 'Konsumsi', icon: 'Coffee', color: '#f59e0b', active: true },
+  { id: 'pc3', name: 'Transportasi', icon: 'Truck', color: '#3b82f6', active: true },
+  { id: 'pc4', name: 'Lain-lain', icon: 'Box', color: '#6b7280', active: true }
+];
+
 const initialSubCategories: SubCategory[] = [
   { id: 'sc1', categoryId: 'c1', name: 'Semen', active: true },
   { id: 'sc2', categoryId: 'c1', name: 'Besi', active: true },
@@ -244,6 +266,7 @@ const generateUUID = (): string => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [pettyCashCategories, setPettyCashCategories] = useState<PettyCashCategory[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -377,9 +400,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchSupabaseData = async () => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
     try {
-      const [vRes, cRes, scRes, mRes, iRes, pRes, cfRes, pcRes, aRes] = await Promise.all([
+      const [vRes, cRes, pccRes, scRes, mRes, iRes, pRes, cfRes, pcRes, aRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
         supabase.from('categories').select('*').order('name'),
+        supabase.from('petty_cash_categories').select('*').order('name'),
         supabase.from('subcategories').select('*').order('name'),
         supabase.from('materials').select('*').order('item_name'),
         supabase.from('invoices').select('*'),
@@ -391,6 +415,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (vRes.data) setVendors(vRes.data);
       if (cRes.data) setCategories(cRes.data);
+      if (pccRes.data) setPettyCashCategories(pccRes.data);
       if (scRes.data) setSubCategories(scRes.data);
       if (aRes.data) {
         // Sync account to LocalStorage
@@ -499,6 +524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       const localVendors = localStorage.getItem('cpms_vendors');
       const localCategories = localStorage.getItem('cpms_categories');
+      const localPettyCashCategories = localStorage.getItem('cpms_petty_cash_categories');
       const localSubCategories = localStorage.getItem('cpms_subcategories');
       const localMaterials = localStorage.getItem('cpms_materials');
       const localInvoices = localStorage.getItem('cpms_invoices');
@@ -511,6 +537,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (localCategories) setCategories(JSON.parse(localCategories));
       else setCategories(initialCategories);
+
+      if (localPettyCashCategories) setPettyCashCategories(JSON.parse(localPettyCashCategories));
+      else setPettyCashCategories(initialPettyCashCategories);
 
       if (localSubCategories) setSubCategories(JSON.parse(localSubCategories));
       else setSubCategories(initialSubCategories);
@@ -785,6 +814,122 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (deleted.length > 0) {
       showToast('success', `${deleted.length} kategori berhasil dihapus`);
+    }
+
+    return { deleted, blocked };
+  };
+
+  const addPettyCashCategory = (category: Omit<PettyCashCategory, 'id'>): PettyCashCategory => {
+    const newId = 'pcc_' + generateUUID();
+    const newCategory = { ...category, id: newId };
+    const updated = [...pettyCashCategories, newCategory];
+    setPettyCashCategories(updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      handleSupabaseWrite(
+        () => supabase.from('petty_cash_categories').insert([{
+          id: newId,
+          name: category.name,
+          icon: category.icon,
+          color: category.color,
+          active: category.active
+        }]),
+        {
+          table: 'petty_cash_categories',
+          method: 'insert',
+          payload: {
+            id: newId,
+            name: category.name,
+            icon: category.icon,
+            color: category.color,
+            active: category.active
+          }
+        }
+      );
+    } else {
+      save('cpms_petty_cash_categories', updated);
+    }
+    showToast('success', 'Kategori Petty Cash berhasil ditambahkan');
+    return newCategory;
+  };
+
+  const updatePettyCashCategory = (id: string, category: Partial<PettyCashCategory>) => {
+    const updated = pettyCashCategories.map(c => c.id === id ? { ...c, ...category } : c);
+    setPettyCashCategories(updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | boolean | null> = {};
+      if (category.name !== undefined) payload.name = category.name;
+      if (category.icon !== undefined) payload.icon = category.icon;
+      if (category.color !== undefined) payload.color = category.color;
+      if (category.active !== undefined) payload.active = category.active;
+
+      handleSupabaseWrite(
+        () => supabase.from('petty_cash_categories').update(payload).eq('id', id),
+        {
+          table: 'petty_cash_categories',
+          method: 'update',
+          payload,
+          match: { id }
+        }
+      );
+    } else {
+      save('cpms_petty_cash_categories', updated);
+    }
+    showToast('success', 'Kategori Petty Cash berhasil diperbarui');
+  };
+
+  const deletePettyCashCategory = (id: string): boolean => {
+    const inUse = pettyCashes.some(c => c.categoryId === id);
+    if (inUse) {
+      showToast('error', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Petty Cash.');
+      return false;
+    }
+    const updated = pettyCashCategories.filter(c => c.id !== id);
+    setPettyCashCategories(updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      handleSupabaseWrite(
+        () => supabase.from('petty_cash_categories').delete().eq('id', id),
+        {
+          table: 'petty_cash_categories',
+          method: 'delete',
+          match: { id }
+        }
+      );
+    } else {
+      save('cpms_petty_cash_categories', updated);
+    }
+    showToast('success', 'Kategori Petty Cash berhasil dihapus');
+    return true;
+  };
+
+  const deletePettyCashCategories = (ids: string[]): { deleted: string[]; blocked: string[] } => {
+    const deleted: string[] = [];
+    const blocked: string[] = [];
+
+    ids.forEach(id => {
+      const inUse = pettyCashes.some(c => c.categoryId === id);
+      if (inUse) {
+        const cat = pettyCashCategories.find(c => c.id === id);
+        blocked.push(cat?.name || id);
+      } else {
+        deleted.push(id);
+      }
+    });
+
+    if (deleted.length > 0) {
+      const updated = pettyCashCategories.filter(c => !deleted.includes(c.id));
+      setPettyCashCategories(updated);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        handleSupabaseWrite(
+          () => supabase.from('petty_cash_categories').delete().in('id', deleted),
+          { table: 'petty_cash_categories', method: 'delete', match: { id: deleted } }
+        );
+      } else {
+        save('cpms_petty_cash_categories', updated);
+      }
+    }
+
+    if (deleted.length > 0) {
+      showToast('success', `${deleted.length} kategori Petty Cash berhasil dihapus`);
     }
 
     return { deleted, blocked };
@@ -1574,6 +1719,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const data = {
       vendors,
       categories,
+      pettyCashCategories,
       subCategories,
       materials,
       invoices,
@@ -1593,6 +1739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Update client state immediately so user sees the data
       if (parsed.categories) setCategories(parsed.categories);
+      if (parsed.pettyCashCategories) setPettyCashCategories(parsed.pettyCashCategories);
       if (parsed.subCategories) setSubCategories(parsed.subCategories);
       if (parsed.vendors) setVendors(parsed.vendors);
       if (parsed.materials) setMaterials(parsed.materials);
@@ -1718,7 +1865,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 id: getOrGenerateUUID(pc.id),
                 transaction_date: pc.transactionDate,
                 transaction_type: pc.transactionType,
-                category_id: pc.categoryId || null,
                 subcategory_id: pc.subcategoryId || null,
                 vendor_id: pc.vendorId ? getOrGenerateUUID(pc.vendorId) : null,
                 description: pc.description,
@@ -1780,6 +1926,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         vendors,
         categories,
+        pettyCashCategories,
         subCategories,
         materials,
         invoices,
@@ -1802,6 +1949,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCategory,
         deleteCategory,
         deleteCategories,
+        addPettyCashCategory,
+        updatePettyCashCategory,
+        deletePettyCashCategory,
+        deletePettyCashCategories,
         addSubCategory,
         updateSubCategory,
         deleteSubCategory,

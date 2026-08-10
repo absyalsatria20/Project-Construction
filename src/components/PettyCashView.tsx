@@ -32,15 +32,15 @@ import { Pagination } from './Pagination';
 export const PettyCashView: React.FC = () => {
   const { 
     pettyCashes: cashflows, 
-    categories, 
+    pettyCashCategories: categories,
+    addPettyCashCategory: addCategory,
+    updatePettyCashCategory: updateCategory,
+    deletePettyCashCategory: deleteCategory,
+    deletePettyCashCategories: deleteCategories,
     addPettyCash: addCashflow, 
     addPettyCashes: addCashflows,
     updatePettyCash: updateCashflow, 
     deletePettyCash: deleteCashflow,
-    addCategory,
-    deleteCategory,
-    deleteCategories,
-    updateCategory,
     itemsPerPage,
     setItemsPerPage,
     deletePettyCashes: deleteCashflows
@@ -234,8 +234,6 @@ export const PettyCashView: React.FC = () => {
         setFormError('Kategori wajib dipilih.');
         return;
       }
-    } else {
-      // Tidak wajib kategori untuk Dana Masuk, tapi jika ada diisi silakan. Atau samakan saja set categoryId ke kosong/default
     }
 
     const payload = {
@@ -304,7 +302,6 @@ export const PettyCashView: React.FC = () => {
   const grandTotalSummary = useMemo(() => {
     return categorySummaryList.reduce((sum, item) => sum + item.total, 0);
   }, [categorySummaryList]);
-
   // Filtered and Sorted Cashflow Data
   const processedCashflows = useMemo(() => {
     let result = [...cashflows];
@@ -607,7 +604,7 @@ export const PettyCashView: React.FC = () => {
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Rekap_Petty_Cash_Kategori.xlsx');
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Rekap_Pengeluaran_Kategori.xlsx');
   };
 
   const exportKategoriPDF = () => {
@@ -650,10 +647,10 @@ export const PettyCashView: React.FC = () => {
       }
     });
 
-    doc.save('Rekap_Petty_Cash_Kategori.pdf');
+    doc.save('Rekap_Pengeluaran_Kategori.pdf');
   };
 
-  // Import Excel
+  // Import Excel (Kategori removed)
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -674,7 +671,7 @@ export const PettyCashView: React.FC = () => {
           return;
         }
 
-        // Validate headers. Expected: 'Tanggal', 'Jenis', 'Kategori', 'Keterangan', 'Nominal', 'Catatan'
+        // Validate headers. Expected: 'Tanggal', 'Jenis', 'Keterangan', 'Nominal', 'Catatan'
         const firstRowKeys = Object.keys(jsonData[0]).map(k => k.trim());
         const expectedHeaders = ['Tanggal', 'Jenis', 'Keterangan', 'Nominal'];
         const hasRequiredHeaders = expectedHeaders.every(h => 
@@ -692,7 +689,6 @@ export const PettyCashView: React.FC = () => {
           return key ? row[key] : undefined;
         };
 
-        // 1. Initialize local cache from database categories
         const categoryCache = new Map<string, string>(); // key: normalized name, value: categoryId
         categories.forEach(c => {
           categoryCache.set(c.name.trim().toLowerCase(), c.id);
@@ -707,7 +703,6 @@ export const PettyCashView: React.FC = () => {
           const valJenis = getRowValue(row, 'Jenis');
           const valKeterangan = getRowValue(row, 'Keterangan');
           const valNominal = getRowValue(row, 'Nominal');
-          const valKategori = getRowValue(row, 'Kategori');
           const valCatatan = getRowValue(row, 'Catatan');
 
           // Parse transactionDate
@@ -786,34 +781,33 @@ export const PettyCashView: React.FC = () => {
             return;
           }
 
-          // Parse category (find or add new category)
-          let catId = '';
-          const rawCategoryName = valKategori ? valKategori.toString() : '';
-          const normalizedName = rawCategoryName.trim().toLowerCase();
-          if (rawCategoryName && rawCategoryName.trim() !== '-') {
-            const cachedId = categoryCache.get(normalizedName);
-            if (cachedId) {
-              catId = cachedId;
-            } else {
-              // Automatically create the category with default attributes
-              const newCat = addCategory({
-                name: rawCategoryName.trim(),
-                icon: 'Wallet',
-                color: '#3B82F6',
-                active: true
-              });
-              catId = newCat.id;
-              // Add to cache so that subsequent rows in this file import reuse it
-              categoryCache.set(normalizedName, catId);
-            }
-          }
-
           const desc = valKeterangan ? valKeterangan.toString().trim() : '';
           const note = valCatatan ? valCatatan.toString().trim() : '';
 
           if (!desc) {
             errorCount++;
             return;
+          }
+
+          // Category logic
+          const valKategori = getRowValue(row, 'Kategori');
+          let catId: string | null = null;
+          if (valKategori) {
+            const catName = String(valKategori).trim();
+            const normCatName = catName.toLowerCase();
+            if (categoryCache.has(normCatName)) {
+              catId = categoryCache.get(normCatName)!;
+            } else {
+              // Create new category if not found
+              const newCat = addCategory({
+                name: catName,
+                icon: 'Tag',
+                color: '#6b7280',
+                active: true
+              });
+              catId = newCat.id;
+              categoryCache.set(normCatName, newCat.id);
+            }
           }
 
           // Push to import list
@@ -955,7 +949,7 @@ export const PettyCashView: React.FC = () => {
             </div>
 
             {/* Filter Options */}
-            <div className="flex flex-col md:flex-row md:items-center gap-4 pt-4 border-t border-slate-100">
+              <div className="flex flex-col md:flex-row md:items-center gap-4 pt-4 border-t border-slate-100">
               {/* Type filter */}
               <select
                 value={typeFilter}
@@ -998,12 +992,11 @@ export const PettyCashView: React.FC = () => {
                 />
               </div>
 
-              {(searchTerm || typeFilter || categoryFilter || dateFilterStart || dateFilterEnd) && (
+              {(searchTerm || typeFilter || dateFilterStart || dateFilterEnd) && (
                 <button
                   onClick={() => {
                     setSearchTerm('');
                     setTypeFilter('');
-                    setCategoryFilter('');
                     setDateFilterStart('');
                     setDateFilterEnd('');
                     setCurrentPage(1);
@@ -1051,7 +1044,7 @@ export const PettyCashView: React.FC = () => {
                       </button>
                     </th>
                     <th className="py-4 px-4 font-semibold w-28">Jenis</th>
-                    <th className="py-4 px-4 font-semibold w-48">Kategori</th>
+                    <th className="py-4 px-4 font-semibold w-28">Kategori</th>
                     <th className="py-4 px-4 font-semibold w-96">Keterangan</th>
                     <th className="py-4 px-4 font-semibold text-right w-36">Debit</th>
                     <th className="py-4 px-4 font-semibold text-right w-36">Kredit</th>
@@ -1064,7 +1057,7 @@ export const PettyCashView: React.FC = () => {
                     let bgClass = "bg-white";
                     if (cf.transactionType === 'Dana Masuk') {
                       bgClass = "bg-green-50/40 hover:bg-green-50/60";
-                    } else if (cf.categoryId === 'c4') {
+                    } else if (cf.categoryId === 'c4') { // Just an example like CashflowView
                       bgClass = "bg-slate-100/50 hover:bg-slate-100/80";
                     } else {
                       bgClass = "hover:bg-slate-50/50";
@@ -1100,7 +1093,7 @@ export const PettyCashView: React.FC = () => {
                             {cf.transactionType}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-slate-700 font-medium break-words max-w-[190px]" title={categoryName}>
+                        <td className="py-4 px-4 whitespace-nowrap text-slate-600 font-medium text-xs">
                           {categoryName}
                         </td>
                         <td className="py-4 px-4 text-slate-800 font-medium break-words max-w-[384px]">
@@ -1137,7 +1130,7 @@ export const PettyCashView: React.FC = () => {
                   })}
                   {processedCashflows.length === 0 && (
                     <tr>
-                      <td colSpan={isBulkEditMode ? 9 : 8} className="py-16 text-center text-slate-400 font-medium">
+                      <td colSpan={isBulkEditMode ? 8 : 7} className="py-16 text-center text-slate-400 font-medium">
                         <div className="flex flex-col items-center justify-center gap-3">
                           <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
                             <Search className="w-6 h-6 text-slate-300" />
@@ -1352,7 +1345,7 @@ export const PettyCashView: React.FC = () => {
                                       showConfirm('Hapus Kategori', `Hapus kategori "${c.name}"?`, () => {
                                         const success = deleteCategory(c.id);
                                         if (!success) {
-                                          showAlert('Gagal Menghapus', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Cashflow.', 'error');
+                                          showAlert('Gagal Menghapus', 'Gagal menghapus! Kategori ini sedang digunakan dalam transaksi Petty Cash.', 'error');
                                         }
                                       });
                                     }}
@@ -1480,28 +1473,34 @@ export const PettyCashView: React.FC = () => {
                       <div className="space-y-4 p-4 border border-slate-100 rounded-2xl bg-slate-50/40">
                         {/* Category */}
                         <div className="space-y-1">
-                          <div className="flex justify-between items-center">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Kategori</label>
+                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide flex justify-between items-center">
+                            <span>Kategori</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setIsAddingCategory(!isAddingCategory);
-                                setNewCategoryName('');
-                              }}
-                              className="text-xs text-blue-600 font-bold hover:underline"
+                              onClick={() => setIsAddingCategory(!isAddingCategory)}
+                              className="text-blue-600 hover:text-blue-700 normal-case flex items-center gap-1"
                             >
-                              {isAddingCategory ? 'Batal' : '+ Kategori Baru'}
+                              <Plus className="w-3.5 h-3.5" /> Tambah Baru
                             </button>
-                          </div>
+                          </label>
+
                           {isAddingCategory ? (
                             <div className="flex gap-2">
                               <input
                                 type="text"
                                 value={newCategoryName}
                                 onChange={(e) => setNewCategoryName(e.target.value)}
-                                placeholder="Nama Kategori Baru..."
-                                className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                placeholder="Nama kategori baru..."
+                                className="flex-1 px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                autoFocus
                               />
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingCategory(false)}
+                                className="px-3 py-1.5 text-slate-500 hover:text-slate-700 font-medium text-xs bg-white border border-slate-200 rounded-xl"
+                              >
+                                Batal
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1540,8 +1539,8 @@ export const PettyCashView: React.FC = () => {
                             type="text"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Keterangan pengeluaran..."
-                            className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            placeholder="Contoh: Pembelian alat tulis"
+                            className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
                           />
                         </div>
                       </div>
@@ -1647,8 +1646,7 @@ export const PettyCashView: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Floating Bulk Action Bar for Categories */}
+        {/* Floating Bulk Action Bar for Categories */}
       <AnimatePresence>
         {isBulkCategoryMode && selectedCategoryIds.length > 0 && (
           <motion.div
@@ -1696,7 +1694,7 @@ export const PettyCashView: React.FC = () => {
                           setTimeout(() => {
                             showAlert(
                               'Sebagian Gagal Dihapus',
-                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan dalam transaksi Cashflow.`,
+                              `${result.blocked.length} kategori tidak dapat dihapus karena sedang digunakan dalam transaksi Petty Cash.`,
                               'info'
                             );
                           }, 300);

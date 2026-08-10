@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS public.petty_cashes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_date DATE NOT NULL,
     transaction_type TEXT NOT NULL,
-    category_id TEXT,
     subcategory_id TEXT,
     vendor_id UUID,
     description TEXT NOT NULL,
