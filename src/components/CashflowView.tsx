@@ -250,7 +250,7 @@ export const CashflowView: React.FC = () => {
     const payload = {
       transactionDate,
       transactionType,
-      categoryId: (categoryId || undefined),
+      categoryId: transactionType === 'Pengeluaran' ? (categoryId || undefined) : undefined,
       vendorId: transactionType === 'Pengeluaran' ? (vendorId || undefined) : undefined,
       description: description,
       amount,
@@ -1079,7 +1079,7 @@ export const CashflowView: React.FC = () => {
                       bgClass = "hover:bg-slate-50/50";
                     }
 
-                    const categoryName = categories.find(c => c.id === cf.categoryId)?.name || '-';
+                    const categoryName = cf.transactionType === 'Dana Masuk' ? '-' : (categories.find(c => c.id === cf.categoryId)?.name || '-');
 
                     return (
                       <tr key={cf.id} className={`${selectedIds.includes(cf.id) ? 'bg-blue-50/30' : bgClass} transition-colors`}>
@@ -1462,7 +1462,13 @@ export const CashflowView: React.FC = () => {
                       <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Jenis Transaksi</label>
                       <select
                         value={transactionType}
-                        onChange={(e) => setTransactionType(e.target.value as 'Dana Masuk' | 'Pengeluaran')}
+                        onChange={(e) => {
+                          const val = e.target.value as 'Dana Masuk' | 'Pengeluaran';
+                          setTransactionType(val);
+                          if (val === 'Dana Masuk') {
+                            setCategoryId('');
+                          }
+                        }}
                         className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
                       >
                         <option value="Dana Masuk">Dana Masuk (Income)</option>
