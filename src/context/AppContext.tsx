@@ -1677,8 +1677,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', `${ids.length} transaksi petty cash berhasil dihapus`);
   };
 
-  // Hitung running balance secara berurutan berdasarkan rowIndex agar stabil dan sesuai urutan baris import Excel
+  // Hitung running balance berdasarkan transactionDate ASC, rowIndex ASC, id ASC
   const sortedCashflows = [...cashflows].sort((a, b) => {
+    const dateA = new Date(a.transactionDate).getTime();
+    const dateB = new Date(b.transactionDate).getTime();
+    if (dateA !== dateB) return dateA - dateB;
     const rowA = a.rowIndex || 0;
     const rowB = b.rowIndex || 0;
     if (rowA !== rowB) return rowA - rowB;
@@ -1696,6 +1699,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const sortedPettyCashes = [...pettyCashes].sort((a, b) => {
+    const dateA = new Date(a.transactionDate).getTime();
+    const dateB = new Date(b.transactionDate).getTime();
+    if (dateA !== dateB) return dateA - dateB;
     const rowA = a.rowIndex || 0;
     const rowB = b.rowIndex || 0;
     if (rowA !== rowB) return rowA - rowB;
