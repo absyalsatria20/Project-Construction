@@ -53,11 +53,11 @@ const initialSubCategories = [
 ];
 
 const initialMaterials = [
-  { id: 'm1', itemName: 'Semen Portland (50kg)', unit: 'Zak', quantityRequested: 100, quantityReceived: 100, receiveDate: '2026-07-15', status: 'Complete', verification: true, note: '' },
-  { id: 'm2', itemName: 'Besi Beton 12mm', unit: 'Batang', quantityRequested: 50, quantityReceived: 30, receiveDate: '2026-07-18', status: 'Partial', verification: true, note: '' },
-  { id: 'm3', itemName: 'Pasir Beton', unit: 'M3', quantityRequested: 10, quantityReceived: 0, receiveDate: '', status: 'Waiting', verification: false, note: '' },
-  { id: 'm4', itemName: 'Batu Split 2/3', unit: 'M3', quantityRequested: 15, quantityReceived: 10, receiveDate: '2026-07-20', status: 'Partial', verification: false, note: 'Batu split agak kotor dan basah' }
-];
+    { id: 'm1', itemName: 'Semen Portland (50kg)', unit: 'Zak', quantityRequested: 100, requestDate: '2026-07-10', quantityReceived: 100, status: 'Complete', receipts: [{ id: 'mr1', receiveDate: '2026-07-15', quantityReceived: 100, verification: true, note: '' }] },
+    { id: 'm2', itemName: 'Besi Beton 12mm', unit: 'Batang', quantityRequested: 50, requestDate: '2026-07-12', quantityReceived: 30, status: 'Partial', receipts: [{ id: 'mr2', receiveDate: '2026-07-18', quantityReceived: 30, verification: true, note: '' }] },
+    { id: 'm3', itemName: 'Pasir Beton', unit: 'M3', quantityRequested: 10, requestDate: '2026-07-22', quantityReceived: 0, status: 'Waiting', receipts: [] },
+    { id: 'm4', itemName: 'Batu Split 2/3', unit: 'M3', quantityRequested: 15, requestDate: '2026-07-18', quantityReceived: 10, status: 'Partial', receipts: [{ id: 'mr3', receiveDate: '2026-07-20', quantityReceived: 10, verification: false, note: 'Batu split agak kotor dan basah' }] }
+  ];
 
 const initialInvoices = [
   { id: 'inv1', vendorId: 'v1', invoiceNumber: 'INV/2026/001', invoiceDate: '2026-07-10', description: 'Pembelian Semen Portland 100 zak', totalInvoice: 7500000, termin: 1 },
@@ -127,11 +127,10 @@ async function seed() {
       item_name: item.itemName,
       unit: item.unit,
       quantity_requested: item.quantityRequested,
+      request_date: item.requestDate || null,
       quantity_received: item.quantityReceived,
-      receive_date: item.receiveDate || null,
       status: item.status,
-      verification: item.verification,
-      note: item.note
+      receipts: item.receipts
     });
     if (error) console.error(`Error material ${item.id}:`, error.message);
   }

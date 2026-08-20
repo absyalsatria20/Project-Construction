@@ -13,9 +13,7 @@ import {
   ArrowUpDown, 
   Check, 
   X,
-  XCircle,
   AlertTriangle,
-  CheckCircle2,
   Calendar
 } from 'lucide-react';
 
@@ -73,15 +71,18 @@ export const MaterialView: React.FC = () => {
       document.body.style.height = '';
     };
   }, [isModalOpen]);
-  const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
+  const [modalMode, setModalMode] = useState<'add' | 'edit-request' | 'edit-receipt' | 'view'>('add');
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
 
   // Form State
   const [itemName, setItemName] = useState('');
   const [unit, setUnit] = useState('');
   const [quantityRequested, setQuantityRequested] = useState<number>(0);
-  const [quantityReceived, setQuantityReceived] = useState<number>(0);
+  const [requestDate, setRequestDate] = useState('');
+  
+  // Receipt State
   const [receiveDate, setReceiveDate] = useState('');
+  const [quantityReceived, setQuantityReceived] = useState<number>(0);
   const [verification, setVerification] = useState(true);
   const [note, setNote] = useState('');
 
@@ -109,6 +110,8 @@ export const MaterialView: React.FC = () => {
     setItemName('');
     setUnit('');
     setQuantityRequested(0);
+    setRequestDate('');
+    
     setQuantityReceived(0);
     setReceiveDate('');
     setVerification(true);
@@ -129,16 +132,32 @@ export const MaterialView: React.FC = () => {
     }
   }, [openMaterialModal, handleOpenAdd, setOpenMaterialModal]);
 
-  const handleOpenEdit = (material: Material) => {
+  const handleOpenEditRequest = (material: Material) => {
     setSelectedMaterial(material);
     setItemName(material.itemName);
     setUnit(material.unit);
     setQuantityRequested(material.quantityRequested);
-    setQuantityReceived(material.quantityReceived);
-    setReceiveDate(material.receiveDate);
-    setVerification(material.verification);
-    setNote(material.note);
-    setModalMode('edit');
+    setRequestDate(material.requestDate);
+    
+    setModalMode('edit-request');
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditReceipt = (material: Material) => {
+    setSelectedMaterial(material);
+    setItemName(material.itemName);
+    setUnit(material.unit);
+    setQuantityRequested(material.quantityRequested);
+    setRequestDate(material.requestDate);
+    
+    // Reset form penerimaan baru
+    setQuantityReceived(0);
+    setReceiveDate('');
+    setVerification(true);
+    setNote('');
+    
+    setModalMode('edit-receipt');
     setError('');
     setIsModalOpen(true);
   };
@@ -152,6 +171,28 @@ export const MaterialView: React.FC = () => {
   const handleDelete = (id: string) => {
     showConfirm('Hapus Material', 'Apakah Anda yakin ingin menghapus data material ini?', () => {
       deleteMaterial(id);
+    });
+  };
+
+  const handleDeleteReceipt = (receiptId: string) => {
+    if (!selectedMaterial) return;
+    
+    showConfirm('Hapus Penerimaan', 'Apakah Anda yakin ingin menghapus riwayat penerimaan ini?', () => {
+      const updatedReceipts = selectedMaterial.receipts.filter(r => r.id !== receiptId);
+      const updatedQuantityReceived = updatedReceipts.reduce((sum, r) => sum + r.quantityReceived, 0);
+      
+      const payload: Partial<Material> = {
+        quantityReceived: updatedQuantityReceived,
+        receipts: updatedReceipts
+      };
+      
+      // Update state local untuk view mode saat ini agar UI langsung refresh
+      setSelectedMaterial({
+        ...selectedMaterial,
+        ...payload
+      });
+      
+      updateMaterial(selectedMaterial.id, payload);
     });
   };
 
@@ -171,40 +212,78 @@ export const MaterialView: React.FC = () => {
       setError('Jumlah Pengajuan harus lebih besar dari 0.');
       return;
     }
+    if (!requestDate) {
+      setError('Tanggal Pengajuan wajib diisi.');
+      return;
+    }
     if (quantityReceived < 0) {
       setError('Jumlah Diterima tidak boleh negatif.');
       return;
     }
-    if (quantityReceived > quantityRequested) {
-      setError('Jumlah Diterima tidak boleh melebihi Jumlah Pengajuan.');
+    
+    // Total Diterima harus dihitung dengan mempertimbangkan receipts sebelumnya (khusus edit)
+    const existingReceived = modalMode === 'edit-receipt' && selectedMaterial ? 
+      selectedMaterial.receipts.reduce((acc, curr) => acc + curr.quantityReceived, 0) : 0;
+      
+    if (modalMode !== 'edit-request' && existingReceived + quantityReceived > quantityRequested) {
+      setError(`Jumlah Diterima tidak boleh melebihi Jumlah Pengajuan. Sisa kuota: ${quantityRequested - existingReceived}`);
       return;
     }
 
-    // Rule: Jika memilih "Tidak Sesuai" (verification === false), wajib mengisi note
-    if (!verification && !note.trim()) {
-      setError('Catatan wajib diisi jika material "Tidak Sesuai".');
-      return;
-    }
+      // Validasi Tambahan untuk "Tambah Penerimaan Baru"
+      if (modalMode !== 'edit-request' && quantityReceived > 0) {
+        if (!receiveDate) {
+          setError('Tanggal Penerimaan wajib diisi jika kuantitas diterima lebih dari 0.');
+          return;
+        }
+        if (!verification && !note.trim()) {
+          setError('Catatan wajib diisi jika material "Tidak Sesuai".');
+          return;
+        }
+      }
 
-    // Rule: Jika received > 0, wajib mengisi receiveDate
-    if (quantityReceived > 0 && !receiveDate) {
-      setError('Tanggal Penerimaan wajib diisi jika kuantitas diterima lebih dari 0.');
-      return;
-    }
-
-    const payload = {
+    const payload: Partial<Material> & Omit<Material, 'id' | 'status'> = {
       itemName,
       unit,
       quantityRequested,
-      quantityReceived: quantityReceived || 0,
-      receiveDate: quantityReceived > 0 ? receiveDate : '',
-      verification,
-      note
+      requestDate,
+      quantityReceived: 0,
+      receipts: []
     };
 
     if (modalMode === 'add') {
-      addMaterial(payload);
-    } else if (modalMode === 'edit' && selectedMaterial) {
+      const receipts = quantityReceived > 0 ? [{
+        id: 'mr_' + Math.random().toString(36).substr(2, 9),
+        receiveDate,
+        quantityReceived: quantityReceived || 0,
+        verification,
+        note
+      }] : [];
+      payload.quantityReceived = quantityReceived || 0;
+      payload.receipts = receipts;
+      
+      addMaterial(payload as Omit<Material, 'id' | 'status'>);
+    } else if (modalMode === 'edit-request' && selectedMaterial) {
+      updateMaterial(selectedMaterial.id, payload);
+    } else if (modalMode === 'edit-receipt' && selectedMaterial) {
+      // Menambah receipt baru
+      const receipts = [...selectedMaterial.receipts];
+      let newTotalReceived = existingReceived;
+      
+      if (quantityReceived > 0) {
+        receipts.push({
+          id: 'mr_' + Math.random().toString(36).substr(2, 9),
+          receiveDate,
+          quantityReceived: quantityReceived,
+          verification,
+          note
+        });
+        newTotalReceived += quantityReceived;
+      }
+      
+      payload.quantityReceived = newTotalReceived;
+      payload.receipts = receipts;
+      
       updateMaterial(selectedMaterial.id, payload);
     }
 
@@ -240,7 +319,7 @@ export const MaterialView: React.FC = () => {
 
     // Date Filter
     if (dateFilter) {
-      result = result.filter(m => m.receiveDate === dateFilter);
+      result = result.filter(m => m.requestDate === dateFilter);
     }
 
     // Sort
@@ -378,8 +457,13 @@ export const MaterialView: React.FC = () => {
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                     />
                   </th>
-                )}
-                <th className="py-4 px-6 font-semibold w-96">
+                  )}
+                  <th className="py-4 px-4 font-semibold text-center w-36">
+                    <button onClick={() => handleSort('requestDate')} className="flex items-center justify-center gap-1 mx-auto hover:text-slate-800">
+                      Tgl Pengajuan <ArrowUpDown className="w-3.5 h-3.5" />
+                    </button>
+                  </th>
+                  <th className="py-4 px-6 font-semibold w-96">
                   <button onClick={() => handleSort('itemName')} className="flex items-center gap-1 hover:text-slate-800">
                     Item Name <ArrowUpDown className="w-3.5 h-3.5" />
                   </button>
@@ -393,8 +477,7 @@ export const MaterialView: React.FC = () => {
                     Status <ArrowUpDown className="w-3.5 h-3.5" />
                   </button>
                 </th>
-                <th className="py-4 px-4 font-semibold text-center w-36">Tgl Terima</th>
-                <th className="py-4 px-4 font-semibold text-center w-36">Nota</th>
+                  <th className="py-4 px-4 font-semibold text-center w-36">Nota</th>
                 <th className="py-4 px-6 font-semibold text-right w-28">Edit</th>
               </tr>
             </thead>
@@ -422,6 +505,14 @@ export const MaterialView: React.FC = () => {
                         />
                       </td>
                     )}
+                    <td className="py-4 px-4 text-center text-slate-500 font-medium whitespace-nowrap">
+                      {m.requestDate ? (
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {new Date(m.requestDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                        </span>
+                      ) : '-'}
+                    </td>
                     <td className="py-4 px-6 font-semibold text-slate-800 break-words max-w-[384px]">{m.itemName}</td>
                     <td className="py-4 px-4 text-center text-slate-600 font-medium whitespace-nowrap">{m.unit}</td>
                     <td className="py-4 px-4 text-right font-semibold text-slate-700 whitespace-nowrap">{m.quantityRequested}</td>
@@ -442,24 +533,12 @@ export const MaterialView: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-4 px-4 text-center whitespace-nowrap">{getStatusBadge(m.status)}</td>
-                    <td className="py-4 px-4 text-center text-slate-500 font-medium whitespace-nowrap">
-                      {m.receiveDate ? (
-                        <span className="inline-flex items-center gap-1 text-xs">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          {new Date(m.receiveDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                        </span>
-                      ) : '-'}
-                    </td>
                     <td className="py-4 px-4 text-center whitespace-nowrap">
                       {m.status === 'Waiting' ? (
                         <span className="text-slate-400 text-xs">Belum Tiba</span>
-                      ) : m.verification ? (
-                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
-                          <Check className="w-3 h-3" /> Sesuai
-                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
-                          <X className="w-3 h-3" /> Tidak Sesuai
+                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 border border-slate-100">
+                          {m.receipts && m.receipts.length} Penerimaan
                         </span>
                       )}
                     </td>
@@ -473,11 +552,18 @@ export const MaterialView: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleOpenEdit(m)}
+                          onClick={() => handleOpenEditRequest(m)}
                           className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
+                          title="Edit Pengajuan"
                         >
                           <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleOpenEditReceipt(m)}
+                          className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Tambah Penerimaan"
+                        >
+                          <Plus className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleDelete(m.id)}
@@ -554,240 +640,308 @@ export const MaterialView: React.FC = () => {
                 onClick={() => setIsModalOpen(false)}
                 className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               />
-              {/* Modal Content */}
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 15 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden z-10"
-              >
-                <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-                  {/* Modal Header */}
-                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
-                    <h3 className="text-base font-bold text-slate-800">
-                      {modalMode === 'add' ? 'Tambah Data Penerimaan' : modalMode === 'edit' ? 'Edit Data Penerimaan' : 'Detail Data Penerimaan'}
-                    </h3>
-                    <button 
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Modal Body */}
-                  <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ scrollbarGutter: 'stable' }}>
-                    {error && (
-                      <div className="p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-xl border border-red-100 flex items-center gap-2">
-                        <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
-                        {error}
-                      </div>
-                    )}
-
-                    {modalMode === 'view' && selectedMaterial ? (
-                      // View Mode
-                      <div className="space-y-4 text-sm">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Nama Item</p>
-                            <p className="font-semibold text-slate-800">{selectedMaterial.itemName}</p>
+                {/* Modal Content */}
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 15 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden z-10"
+                >
+                  <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+                    {/* Modal Header */}
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+                      <h3 className="text-base font-bold text-slate-800">
+                        {modalMode === 'add' ? 'Tambah Pengajuan' : modalMode === 'edit-request' ? 'Edit Pengajuan' : modalMode === 'edit-receipt' ? 'Tambah Penerimaan' : 'Detail Material'}
+                      </h3>
+                      <button 
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+  
+                    {/* Modal Body */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ scrollbarGutter: 'stable' }}>
+                      {error && (
+                        <div className="p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-xl border border-red-100 flex items-center gap-2">
+                          <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
+                          {error}
+                        </div>
+                      )}
+  
+                      {modalMode === 'view' && selectedMaterial ? (
+                        // View Mode
+                        <div className="space-y-4 text-sm">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Nama Item</p>
+                              <p className="font-semibold text-slate-800">{selectedMaterial.itemName}</p>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Satuan</p>
+                              <p className="font-semibold text-slate-800">{selectedMaterial.unit}</p>
+                            </div>
                           </div>
+  
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Jumlah Diajukan (Requested)</p>
+                              <p className="font-semibold text-slate-800">{selectedMaterial.quantityRequested}</p>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Jumlah Diterima (Received)</p>
+                              <p className="font-semibold text-slate-800">{selectedMaterial.quantityReceived}</p>
+                            </div>
+                          </div>
+  
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Status</p>
+                              <p className="mt-0.5">{getStatusBadge(selectedMaterial.status)}</p>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-xs text-slate-400 font-semibold mb-0.5">Tanggal Pengajuan</p>
+                              <p className="font-semibold text-slate-800">
+                                {selectedMaterial.requestDate ? new Date(selectedMaterial.requestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
+                              </p>
+                            </div>
+                          </div>
+  
                           <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Satuan</p>
-                            <p className="font-semibold text-slate-800">{selectedMaterial.unit}</p>
+                            <p className="text-xs text-slate-400 font-semibold mb-3">Riwayat Penerimaan</p>
+                            {selectedMaterial.receipts && selectedMaterial.receipts.length > 0 ? (
+                              <div className="space-y-3">
+                                {selectedMaterial.receipts.map((receipt, idx) => (
+                                  <div key={receipt.id || idx} className="border border-slate-200 rounded-lg p-3 bg-white">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span className="text-sm font-semibold text-slate-800">
+                                        {new Date(receipt.receiveDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                      </span>
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-sm font-bold text-blue-600">
+                                          {receipt.quantityReceived} {selectedMaterial.unit}
+                                        </span>
+                                        <button 
+                                          onClick={() => handleDeleteReceipt(receipt.id)}
+                                          className="p-1 text-red-500 hover:bg-red-50 hover:text-red-700 rounded transition-colors"
+                                          title="Hapus penerimaan ini"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {receipt.verification ? (
+                                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
+                                          <Check className="w-3 h-3" /> Sesuai
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                                          <X className="w-3 h-3" /> Tidak Sesuai
+                                        </span>
+                                      )}
+                                    </div>
+                                    {receipt.note && (
+                                      <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                                        {receipt.note}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="font-semibold text-slate-500 text-sm">Belum ada riwayat penerimaan</p>
+                            )}
                           </div>
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Jumlah Diajukan (Requested)</p>
-                            <p className="font-semibold text-slate-800">{selectedMaterial.quantityRequested}</p>
-                          </div>
-                          <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Jumlah Diterima (Received)</p>
-                            <p className="font-semibold text-slate-800">{selectedMaterial.quantityReceived}</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Status</p>
-                            <p className="mt-0.5">{getStatusBadge(selectedMaterial.status)}</p>
-                          </div>
-                          <div className="p-3 bg-slate-50 rounded-xl">
-                            <p className="text-xs text-slate-400 font-semibold mb-0.5">Tanggal Penerimaan</p>
-                            <p className="font-semibold text-slate-800">
-                              {selectedMaterial.receiveDate ? new Date(selectedMaterial.receiveDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="p-3 bg-slate-50 rounded-xl">
-                          <p className="text-xs text-slate-400 font-semibold mb-0.5">Verifikasi Kelayakan</p>
-                          {selectedMaterial.status === 'Waiting' ? (
-                            <p className="font-semibold text-slate-500">Belum diterima</p>
-                          ) : selectedMaterial.verification ? (
-                            <p className="font-semibold text-green-600 inline-flex items-center gap-1">
-                              <CheckCircle2 className="w-4 h-4" /> Sesuai Spesifikasi
-                            </p>
-                          ) : (
-                            <p className="font-semibold text-red-600 inline-flex items-center gap-1">
-                              <XCircle className="w-4 h-4" /> Tidak Sesuai Spesifikasi
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="p-3 bg-slate-50 rounded-xl">
-                          <p className="text-xs text-slate-400 font-semibold mb-0.5">Catatan / Keterangan</p>
-                          <p className="text-slate-700 italic">{selectedMaterial.note || 'Tidak ada catatan.'}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      // Add / Edit Mode
-                      <div className="space-y-4">
-                        {/* Item Name */}
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Nama Item</label>
-                          <input
-                            type="text"
-                            value={itemName}
-                            onChange={(e) => setItemName(e.target.value)}
-                            placeholder="Contoh: Semen Portland, Pasir Pasang"
-                            className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Unit */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Satuan</label>
-                            <input
+                      ) : (
+                        // Add / Edit Mode
+                          <div className="space-y-4">
+                            {/* Item Name */}
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Nama Item <span className="text-red-500">*</span></label>
+                              <input
                               type="text"
-                              value={unit}
-                              onChange={(e) => setUnit(e.target.value)}
-                              placeholder="Zak, M3, Kg, Batang, dll"
-                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
-                          </div>
-
-                          {/* Receive Date */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tanggal Terima</label>
-                            <input
-                              type="date"
-                              value={receiveDate}
-                              onChange={(e) => setReceiveDate(e.target.value)}
-                              disabled={quantityReceived === 0}
+                              value={itemName}
+                              onChange={(e) => setItemName(e.target.value)}
+                              disabled={modalMode === 'edit-receipt'}
+                              placeholder="Contoh: Semen Portland, Pasir Pasang"
                               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
                             />
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Quantity Requested */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Jml Pengajuan</label>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={quantityRequested || ''}
-                              onChange={(e) => setQuantityRequested(Number(e.target.value))}
-                              placeholder="0"
-                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
-                          </div>
-
-                          {/* Quantity Received */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Jml Diterima</label>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={quantityReceived || 0}
-                              onChange={(e) => {
-                                const val = Number(e.target.value);
-                                setQuantityReceived(val);
-                                if (val === 0) setReceiveDate('');
-                              }}
-                              placeholder="0"
-                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Verification & Note */}
-                        {quantityReceived > 0 && (
-                          <div className="space-y-4 p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1">Verifikasi Kelayakan Material</label>
-                              <div className="flex gap-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name="verification"
-                                    checked={verification === true}
-                                    onChange={() => setVerification(true)}
-                                    className="text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-                                    ✅ Sesuai
-                                  </span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name="verification"
-                                    checked={verification === false}
-                                    onChange={() => setVerification(false)}
-                                    className="text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm font-semibold text-slate-700 flex items-center gap-1">
-                                    ❌ Tidak Sesuai
-                                  </span>
-                                </label>
-                              </div>
+  
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Unit */}
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Satuan <span className="text-red-500">*</span></label>
+                                <input
+                                type="text"
+                                value={unit}
+                                onChange={(e) => setUnit(e.target.value)}
+                                disabled={modalMode === 'edit-receipt'}
+                                placeholder="Zak, M3, dll"
+                                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+                              />
+                            </div>
+  
+                              {/* Request Date */}
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tanggal Pengajuan <span className="text-red-500">*</span></label>
+                                <input
+                                type="date"
+                                value={requestDate}
+                                onChange={(e) => setRequestDate(e.target.value)}
+                                disabled={modalMode === 'edit-receipt'}
+                                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+                              />
                             </div>
                           </div>
-                        )}
+  
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Quantity Requested */}
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Jml Pengajuan <span className="text-red-500">*</span></label>
+                                <input
+                                type="number"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={quantityRequested || ''}
+                                onChange={(e) => setQuantityRequested(Number(e.target.value))}
+                                disabled={modalMode === 'edit-receipt'}
+                                placeholder="0"
+                                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
+                            />
+                          </div>
 
-                        {/* Note */}
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
-                            Catatan {(!verification && quantityReceived > 0) && <span className="text-red-500">*</span>}
-                          </label>
-                          <textarea
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            placeholder={(!verification && quantityReceived > 0) ? "Wajib diisi jika material tidak sesuai spesifikasi..." : "Catatan tambahan mengenai kondisi fisik barang saat diterima..."}
-                            className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 h-20 resize-none"
-                          />
+                          {/* Info Edit Total */}
+                          {modalMode === 'edit-receipt' && selectedMaterial && (
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Total Diterima (Sblmnya)</label>
+                              <div className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm bg-slate-50 text-slate-500 font-semibold">
+                                {selectedMaterial.receipts.reduce((acc, curr) => acc + curr.quantityReceived, 0)} / {selectedMaterial.quantityRequested} {unit}
+                              </div>
+                            </div>
+                          )}
                         </div>
+
+                        {modalMode !== 'edit-request' && (
+                          <>
+                            <div className="relative py-4">
+                              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div className="w-full border-t border-slate-200"></div>
+                              </div>
+                              <div className="relative flex justify-center">
+                                <span className="bg-white px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                  {modalMode === 'add' ? 'Data Penerimaan Pertama (Opsional)' : 'Tambah Penerimaan Baru'}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Receive Date */}
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                                  Tanggal Terima {quantityReceived > 0 && <span className="text-red-500">*</span>}
+                                </label>
+                                <input
+                                  type="date"
+                                  value={receiveDate}
+                                  onChange={(e) => setReceiveDate(e.target.value)}
+                                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                              </div>
+                              
+                              {/* Quantity Received */}
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                                  {modalMode === 'add' ? 'Jml Diterima Awal' : 'Jml Diterima Baru'}
+                                </label>
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={quantityReceived || ''}
+                                  onChange={(e) => setQuantityReceived(Number(e.target.value))}
+                                  placeholder="0"
+                                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                              </div>
+                            </div>
+    
+                            {/* Verification & Note */}
+                            {quantityReceived > 0 && (
+                              <div className="space-y-4 p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1">Verifikasi Kelayakan Material</label>
+                                  <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name="verification"
+                                        checked={verification === true}
+                                        onChange={() => setVerification(true)}
+                                        className="text-blue-600 focus:ring-blue-500"
+                                      />
+                                      <span className="text-sm font-semibold text-slate-700 flex items-center gap-1">
+                                        <Check className="w-4 h-4 text-green-600" /> Sesuai
+                                      </span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name="verification"
+                                        checked={verification === false}
+                                        onChange={() => setVerification(false)}
+                                        className="text-blue-600 focus:ring-blue-500"
+                                      />
+                                      <span className="text-sm font-semibold text-slate-700 flex items-center gap-1">
+                                        <X className="w-4 h-4 text-red-600" /> Tidak Sesuai
+                                      </span>
+                                    </label>
+                                  </div>
+                                </div>
+    
+                                {/* Note */}
+                                <div className="space-y-1">
+                                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                                    Catatan {(!verification && quantityReceived > 0) && <span className="text-red-500">*</span>}
+                                  </label>
+                                  <textarea
+                                    value={note}
+                                    onChange={(e) => setNote(e.target.value)}
+                                    placeholder={(!verification && quantityReceived > 0) ? "Wajib diisi jika material tidak sesuai spesifikasi..." : "Catatan tambahan mengenai kondisi fisik barang saat diterima..."}
+                                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 h-20 resize-none"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Modal Footer */}
-                  <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-white flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsModalOpen(false)}
-                      className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
-                    >
-                      {modalMode === 'view' ? 'Tutup' : 'Batal'}
-                    </button>
-                    {modalMode !== 'view' && (
+                    <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50 flex-shrink-0">
                       <button
-                        type="submit"
-                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-500/10 transition-colors"
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        className="px-5 py-2.5 border border-slate-200 text-slate-700 bg-white rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-200"
                       >
-                        Simpan
+                        {modalMode === 'view' ? 'Tutup' : 'Batal'}
                       </button>
-                    )}
-                  </div>
+                      {modalMode !== 'view' && (
+                        <button
+                          type="submit"
+                          className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        >
+                          Simpan
+                        </button>
+                      )}
+                    </div>
                 </form>
               </motion.div>
             </div>

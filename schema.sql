@@ -53,11 +53,10 @@ CREATE TABLE IF NOT EXISTS materials (
     item_name TEXT NOT NULL,
     unit TEXT NOT NULL,
     quantity_requested NUMERIC NOT NULL,
-    quantity_received NUMERIC NOT NULL,
-    receive_date TEXT,
+    request_date TEXT,
+    quantity_received NUMERIC NOT NULL DEFAULT 0,
     status TEXT NOT NULL,
-    verification BOOLEAN DEFAULT false,
-    note TEXT DEFAULT '',
+    receipts JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

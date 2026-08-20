@@ -37,16 +37,23 @@ export interface SubCategory {
   active: boolean;
 }
 
+export interface MaterialReceipt {
+  id: string;
+  receiveDate: string;
+  quantityReceived: number;
+  verification: boolean;
+  note: string;
+}
+
 export interface Material {
   id: string;
   itemName: string;
   unit: string;
   quantityRequested: number;
+  requestDate: string;
   quantityReceived: number;
-  receiveDate: string;
   status: 'Complete' | 'Partial' | 'Waiting';
-  verification: boolean; // true = Sesuai, false = Tidak Sesuai
-  note: string;
+  receipts: MaterialReceipt[];
 }
 
 export interface Invoice {
@@ -227,10 +234,10 @@ const initialSubCategories: SubCategory[] = [
 ];
 
 const initialMaterials: Material[] = [
-  { id: 'm1', itemName: 'Semen Portland (50kg)', unit: 'Zak', quantityRequested: 100, quantityReceived: 100, receiveDate: '2026-07-15', status: 'Complete', verification: true, note: '' },
-  { id: 'm2', itemName: 'Besi Beton 12mm', unit: 'Batang', quantityRequested: 50, quantityReceived: 30, receiveDate: '2026-07-18', status: 'Partial', verification: true, note: '' },
-  { id: 'm3', itemName: 'Pasir Beton', unit: 'M3', quantityRequested: 10, quantityReceived: 0, receiveDate: '', status: 'Waiting', verification: false, note: '' },
-  { id: 'm4', itemName: 'Batu Split 2/3', unit: 'M3', quantityRequested: 15, quantityReceived: 10, receiveDate: '2026-07-20', status: 'Partial', verification: false, note: 'Batu split agak kotor dan basah' }
+  { id: 'm1', itemName: 'Semen Portland (50kg)', unit: 'Zak', quantityRequested: 100, requestDate: '2026-07-10', quantityReceived: 100, status: 'Complete', receipts: [{ id: 'mr1', receiveDate: '2026-07-15', quantityReceived: 100, verification: true, note: '' }] },
+  { id: 'm2', itemName: 'Besi Beton 12mm', unit: 'Batang', quantityRequested: 50, requestDate: '2026-07-12', quantityReceived: 30, status: 'Partial', receipts: [{ id: 'mr2', receiveDate: '2026-07-18', quantityReceived: 30, verification: true, note: '' }] },
+  { id: 'm3', itemName: 'Pasir Beton', unit: 'M3', quantityRequested: 10, requestDate: '2026-07-22', quantityReceived: 0, status: 'Waiting', receipts: [] },
+  { id: 'm4', itemName: 'Batu Split 2/3', unit: 'M3', quantityRequested: 15, requestDate: '2026-07-18', quantityReceived: 10, status: 'Partial', receipts: [{ id: 'mr3', receiveDate: '2026-07-20', quantityReceived: 10, verification: false, note: 'Batu split agak kotor dan basah' }] }
 ];
 
 const initialInvoices: Invoice[] = [
@@ -423,19 +430,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem('cpms_user_password', aRes.data.password);
         setCurrentUser({ username: aRes.data.username });
       }
-      if (mRes.data) {
-        setMaterials(mRes.data.map((m) => ({
-          id: m.id,
-          itemName: m.item_name,
-          unit: m.unit,
-          quantityRequested: Number(m.quantity_requested),
-          quantityReceived: Number(m.quantity_received),
-          receiveDate: m.receive_date || '',
-          status: m.status as 'Complete' | 'Partial' | 'Waiting',
-          verification: m.verification,
-          note: m.note || ''
-        })));
-      }
+        if (mRes.data) {
+          setMaterials(mRes.data.map((m) => ({
+            id: m.id,
+            itemName: m.item_name,
+            unit: m.unit,
+            quantityRequested: Number(m.quantity_requested),
+            requestDate: m.request_date || '',
+            quantityReceived: Number(m.quantity_received),
+            status: m.status as 'Complete' | 'Partial' | 'Waiting',
+            receipts: typeof m.receipts === 'string' ? JSON.parse(m.receipts) : (m.receipts || [])
+          })));
+        }
       if (iRes.data) {
         setInvoices(iRes.data.map((i) => ({
           id: i.id,
@@ -1009,95 +1015,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', 'Sub-kategori berhasil dihapus');
   };
 
-  // Material actions
-  const addMaterial = (material: Omit<Material, 'id' | 'status'>) => {
-    let status: 'Complete' | 'Partial' | 'Waiting' = 'Waiting';
-    if (material.quantityReceived === material.quantityRequested) {
-      status = 'Complete';
-    } else if (material.quantityReceived > 0 && material.quantityReceived < material.quantityRequested) {
-      status = 'Partial';
-    }
-    const newId = generateUUID();
-    const newMat = { ...material, id: newId, status };
-    const updated = [...materials, newMat];
-    setMaterials(updated);
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      handleSupabaseWrite(
-        () => supabase.from('materials').insert([{
-          id: newId,
-          item_name: material.itemName,
-          unit: material.unit,
-          quantity_requested: material.quantityRequested,
-          quantity_received: material.quantityReceived,
-          receive_date: material.receiveDate || null,
-          status,
-          verification: material.verification,
-          note: material.note
-        }]),
-        {
-          table: 'materials',
-          method: 'insert',
-          payload: {
+    // Material actions
+    const addMaterial = (material: Omit<Material, 'id' | 'status'>) => {
+      let status: 'Complete' | 'Partial' | 'Waiting' = 'Waiting';
+      if (material.quantityReceived >= material.quantityRequested && material.quantityRequested > 0) {
+        status = 'Complete';
+      } else if (material.quantityReceived > 0) {
+        status = 'Partial';
+      }
+      const newId = generateUUID();
+      const newMat = { ...material, id: newId, status };
+      const updated = [...materials, newMat];
+      setMaterials(updated);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        handleSupabaseWrite(
+          () => supabase.from('materials').insert([{
             id: newId,
             item_name: material.itemName,
             unit: material.unit,
             quantity_requested: material.quantityRequested,
+            request_date: material.requestDate || null,
             quantity_received: material.quantityReceived,
-            receive_date: material.receiveDate || null,
             status,
-            verification: material.verification,
-            note: material.note
+            receipts: material.receipts
+          }]),
+          {
+            table: 'materials',
+            method: 'insert',
+            payload: {
+              id: newId,
+              item_name: material.itemName,
+              unit: material.unit,
+              quantity_requested: material.quantityRequested,
+              request_date: material.requestDate || null,
+              quantity_received: material.quantityReceived,
+              status,
+              receipts: material.receipts
+            }
           }
-        }
-      );
-    } else {
-      save('cpms_materials', updated);
-    }
-    showToast('success', 'Material berhasil ditambahkan');
-  };
-
-  const updateMaterial = (id: string, material: Partial<Material>) => {
-    let newStatus: 'Complete' | 'Partial' | 'Waiting' | undefined;
-    const updated = materials.map(m => {
-      if (m.id === id) {
-        const merged = { ...m, ...material };
-        let status: 'Complete' | 'Partial' | 'Waiting' = 'Waiting';
-        if (merged.quantityReceived >= merged.quantityRequested) {
-          status = 'Complete';
-        } else if (merged.quantityReceived > 0 && merged.quantityReceived < merged.quantityRequested) {
-          status = 'Partial';
-        }
-        newStatus = status;
-        return { ...merged, status };
+        );
+      } else {
+        save('cpms_materials', updated);
       }
-      return m;
-    });
-    setMaterials(updated);
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      const payload: Record<string, string | number | boolean | null> = {};
-      if (material.itemName !== undefined) payload.item_name = material.itemName;
-      if (material.unit !== undefined) payload.unit = material.unit;
-      if (material.quantityRequested !== undefined) payload.quantity_requested = material.quantityRequested;
-      if (material.quantityReceived !== undefined) payload.quantity_received = material.quantityReceived;
-      if (material.receiveDate !== undefined) payload.receive_date = material.receiveDate || null;
-      if (newStatus !== undefined) payload.status = newStatus;
-      if (material.verification !== undefined) payload.verification = material.verification;
-      if (material.note !== undefined) payload.note = material.note;
+      showToast('success', 'Material berhasil ditambahkan');
+    };
 
-      handleSupabaseWrite(
-        () => supabase.from('materials').update(payload).eq('id', id),
-        {
-          table: 'materials',
-          method: 'update',
-          payload,
-          match: { id }
+    const updateMaterial = (id: string, material: Partial<Material>) => {
+      let newStatus: 'Complete' | 'Partial' | 'Waiting' | undefined;
+      const updated = materials.map(m => {
+        if (m.id === id) {
+          const merged = { ...m, ...material };
+          let status: 'Complete' | 'Partial' | 'Waiting' = 'Waiting';
+          if (merged.quantityReceived >= merged.quantityRequested && merged.quantityRequested > 0) {
+            status = 'Complete';
+          } else if (merged.quantityReceived > 0) {
+            status = 'Partial';
+          }
+          newStatus = status;
+          return { ...merged, status };
         }
-      );
-    } else {
-      save('cpms_materials', updated);
-    }
-    showToast('success', 'Material berhasil diperbarui');
-  };
+        return m;
+      });
+      setMaterials(updated);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        const payload: Record<string, string | number | boolean | null | MaterialReceipt[]> = {};
+        if (material.itemName !== undefined) payload.item_name = material.itemName;
+        if (material.unit !== undefined) payload.unit = material.unit;
+        if (material.quantityRequested !== undefined) payload.quantity_requested = material.quantityRequested;
+        if (material.requestDate !== undefined) payload.request_date = material.requestDate || null;
+        if (material.quantityReceived !== undefined) payload.quantity_received = material.quantityReceived;
+        if (newStatus !== undefined) payload.status = newStatus;
+        if (material.receipts !== undefined) payload.receipts = material.receipts;
+
+        handleSupabaseWrite(
+          () => supabase.from('materials').update(payload).eq('id', id),
+          {
+            table: 'materials',
+            method: 'update',
+            payload,
+            match: { id }
+          }
+        );
+      } else {
+        save('cpms_materials', updated);
+      }
+      showToast('success', 'Material berhasil diperbarui');
+    };
 
   const deleteMaterial = (id: string) => {
     const updated = materials.filter(m => m.id !== id);
@@ -1811,18 +1814,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const { error } = await supabase.from('vendors').upsert(payloads);
               if (error) throw new Error(`Vendors: ${error.message}`);
             }
-            if (parsed.materials) {
-              const payloads = parsed.materials.map((m: Material) => ({
-                id: getOrGenerateUUID(m.id),
-                item_name: m.itemName,
-                unit: m.unit,
-                quantity_requested: m.quantityRequested,
-                quantity_received: m.quantityReceived,
-                receive_date: m.receiveDate || null,
-                status: m.status,
-                verification: m.verification,
-                note: m.note
-              }));
+              if (parsed.materials) {
+                const payloads = parsed.materials.map((m: Material) => ({
+                  id: getOrGenerateUUID(m.id),
+                  item_name: m.itemName,
+                  unit: m.unit,
+                  quantity_requested: m.quantityRequested,
+                  request_date: m.requestDate || null,
+                  quantity_received: m.quantityReceived,
+                  status: m.status,
+                  receipts: m.receipts
+                }));
               const { error } = await supabase.from('materials').upsert(payloads);
               if (error) throw new Error(`Materials: ${error.message}`);
             }
