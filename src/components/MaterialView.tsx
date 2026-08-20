@@ -819,7 +819,7 @@ export const MaterialView: React.FC = () => {
                           {/* Info Edit Total */}
                           {modalMode === 'edit-receipt' && selectedMaterial && (
                             <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Total Diterima (Sblmnya)</label>
+                              <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Total Diterima</label>
                               <div className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm bg-slate-50 text-slate-500 font-semibold">
                                 {selectedMaterial.receipts.reduce((acc, curr) => acc + curr.quantityReceived, 0)} / {selectedMaterial.quantityRequested} {unit}
                               </div>
