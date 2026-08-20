@@ -720,18 +720,19 @@ export const MaterialView: React.FC = () => {
                                       <span className="text-sm font-semibold text-slate-800">
                                         {new Date(receipt.receiveDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                                       </span>
-                                      <div className="flex items-center gap-3">
-                                        <span className="text-sm font-bold text-blue-600">
-                                          {receipt.quantityReceived} {selectedMaterial.unit}
-                                        </span>
-                                        <button 
-                                          onClick={() => handleDeleteReceipt(receipt.id)}
-                                          className="p-1 text-red-500 hover:bg-red-50 hover:text-red-700 rounded transition-colors"
-                                          title="Hapus penerimaan ini"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-sm font-bold text-blue-600">
+                                            {receipt.quantityReceived} {selectedMaterial.unit}
+                                          </span>
+                                          <button 
+                                            type="button"
+                                            onClick={() => handleDeleteReceipt(receipt.id)}
+                                            className="p-1 text-red-500 hover:bg-red-50 hover:text-red-700 rounded transition-colors"
+                                            title="Hapus penerimaan ini"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2 mb-1">
                                       {receipt.verification ? (
