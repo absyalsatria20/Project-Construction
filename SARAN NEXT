@@ -1,5 +1,5 @@
 Semua fitur utama jalan stabil. Rencana berikut:
-1. Realtime Sync: Pasang Supabase Realtime. Sinkron data otomatis tanpa refresh antar HP dan desktop.
-2. Offline Mode: Simpan antrean aksi gagal saat offline. Kirim ulang saat internet aktif kembali.
-3. Laporan Keuangan: Tambah grafik perbandingan bulanan / tahunan di Dashboard.
-4. Notifikasi Material: Warning otomatis jika status material "Waiting" terlalu lama.
+1. Laporan Keuangan: Tambah grafik perbandingan bulanan / tahunan di Dashboard.
+2. Notifikasi Material: Warning otomatis jika status material "Waiting" terlalu lama.
+3. Keamanan Login: Password saat ini disimpan plaintext di `localStorage` dan tabel `accounts`. Jika project dipakai lebih banyak user atau menangani data sensitif, migrasikan login ke Supabase Auth dan hapus penyimpanan password plaintext.
+4. Multi-user & Database Security: Jika nanti ada orang lain yang menangani project, tambahkan role/permission dan Supabase Row Level Security (RLS). Tambahkan juga unique constraint nomor invoice di database agar duplikat tetap tertolak meski ada penulisan langsung atau akses bersamaan.

@@ -1152,8 +1152,12 @@ export const CashflowView: React.FC = () => {
                             <Search className="w-6 h-6 text-slate-300" />
                           </div>
                           <div className="space-y-0.5">
-                            <p className="text-sm font-bold text-slate-700">Tidak ditemukan data transaksi</p>
-                            <p className="text-xs text-slate-400">Silakan periksa filter atau tambahkan data baru</p>
+                            <p className="text-sm font-bold text-slate-700">
+                                                          {cashflows.length === 0 ? 'Belum ada transaksi' : 'Tidak ditemukan data transaksi'}
+                                                        </p>
+                                                        <p className="text-xs text-slate-400">
+                                                          {cashflows.length === 0 ? 'Tambahkan transaksi pertama untuk mulai mencatat arus kas.' : 'Silakan periksa filter atau reset pencarian.'}
+                                                        </p>
                           </div>
                         </div>
                       </td>

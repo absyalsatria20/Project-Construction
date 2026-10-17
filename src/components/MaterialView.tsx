@@ -585,8 +585,12 @@ export const MaterialView: React.FC = () => {
                         <Search className="w-6 h-6 text-slate-300" />
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-sm font-bold text-slate-700">Tidak ditemukan data material</p>
-                        <p className="text-xs text-slate-400">Silakan periksa filter atau tambahkan data baru</p>
+                        <p className="text-sm font-bold text-slate-700">
+                                                {materials.length === 0 ? 'Belum ada material' : 'Tidak ditemukan data material'}
+                                              </p>
+                                              <p className="text-xs text-slate-400">
+                                                {materials.length === 0 ? 'Tambahkan pengajuan material pertama untuk mulai mencatat kebutuhan.' : 'Silakan periksa filter atau reset pencarian.'}
+                                              </p>
                       </div>
                     </div>
                   </td>

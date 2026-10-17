@@ -105,6 +105,26 @@ export interface PettyCash {
   rowIndex?: number;
 }
 
+export interface CashflowGreenHouseCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  active: boolean;
+}
+
+export interface CashflowGreenHouse {
+  id: string;
+  transactionDate: string;
+  categoryId?: string;
+  description: string;
+  debit: number;
+  credit: number;
+  runningBalance?: number;
+  createdAt?: number;
+  rowIndex?: number;
+}
+
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'info' | 'warning';
@@ -120,6 +140,8 @@ export interface Toast {
   invoices: Invoice[];
   payments: Payment[];
   cashflows: Cashflow[];
+  cashflowGreenHouse: CashflowGreenHouse[];
+  cashflowGreenHouseCategories: CashflowGreenHouseCategory[];
   pettyCashes: PettyCash[];
   toasts: Toast[];
   showToast: (type: 'success' | 'error' | 'info' | 'warning', message: string) => void;
@@ -177,6 +199,17 @@ export interface Toast {
   deleteCashflow: (id: string) => void;
   deleteCashflows: (ids: string[]) => void;
 
+  // Cashflow Green House actions
+  addCashflowGreenHouse: (cashflow: Omit<CashflowGreenHouse, 'id' | 'runningBalance'>) => void;
+  addCashflowsGreenHouse: (cashflowList: Omit<CashflowGreenHouse, 'id' | 'runningBalance'>[]) => void;
+  updateCashflowGreenHouse: (id: string, cashflow: Partial<CashflowGreenHouse>) => void;
+  deleteCashflowGreenHouse: (id: string) => void;
+  deleteCashflowsGreenHouse: (ids: string[]) => void;
+  addCashflowGreenHouseCategory: (category: Omit<CashflowGreenHouseCategory, 'id'>) => CashflowGreenHouseCategory;
+  updateCashflowGreenHouseCategory: (id: string, category: Partial<CashflowGreenHouseCategory>) => void;
+  deleteCashflowGreenHouseCategory: (id: string) => boolean;
+  deleteCashflowGreenHouseCategories: (ids: string[]) => { deleted: string[]; blocked: string[] };
+
   // PettyCash actions
   addPettyCash: (pettyCash: Omit<PettyCash, 'id' | 'runningBalance'>) => void;
   addPettyCashes: (pettyCashList: Omit<PettyCash, 'id' | 'runningBalance'>[]) => void;
@@ -194,6 +227,9 @@ export interface Toast {
   logout: () => void;
   updateAccount: (username: string, password?: string) => void;
   currentUser: { username: string };
+  isDataLoading: boolean;
+  dataLoadError: string | null;
+  retryDataLoad: () => void;
   importAllData: (jsonData: string) => boolean;
   exportAllData: () => string;
 }
@@ -250,6 +286,12 @@ const initialPayments: Payment[] = [
   { id: 'p2', invoiceId: 'inv2', paymentDate: '2026-07-13', amount: 4500000, paymentNote: 'DP 50% kurang 5 juta' }
 ];
 
+const initialCashflowGreenHouseCategories: CashflowGreenHouseCategory[] = [
+  { id: 'cfgh_cat_1', name: 'Operasional Kantor', icon: 'Building2', color: '#3b82f6', active: true },
+  { id: 'cfgh_cat_2', name: 'Gaji dan Tunjangan', icon: 'Users', color: '#10b981', active: true },
+  { id: 'cfgh_cat_3', name: 'Lain-lain', icon: 'Box', color: '#6b7280', active: true }
+];
+
 const initialCashflows: Cashflow[] = [
   { id: 'cf1', transactionDate: '2026-07-01', transactionType: 'Dana Masuk', description: 'Modal Awal dari Owner', amount: 100000000, note: 'Transfer bank Mandiri' },
   { id: 'cf2', transactionDate: '2026-07-11', transactionType: 'Pengeluaran', categoryId: 'c1', subcategoryId: 'sc1', vendorId: 'v1', description: 'Pembayaran INV/2026/001 - Semen Portland', amount: 7500000, note: 'Transfer BCA' },
@@ -279,8 +321,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [cashflows, setCashflows] = useState<Cashflow[]>([]);
+  const [cashflowGreenHouse, setCashflowGreenHouse] = useState<CashflowGreenHouse[]>([]);
+  const [cashflowGreenHouseCategories, setCashflowGreenHouseCategories] = useState<CashflowGreenHouseCategory[]>([]);
   const [pettyCashes, setPettyCashes] = useState<PettyCash[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL));
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -406,6 +452,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync Supabase Helper Functions
   const fetchSupabaseData = async () => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    setIsDataLoading(true);
+    setDataLoadError(null);
     try {
       const [vRes, cRes, pccRes, scRes, mRes, iRes, pRes, cfRes, pcRes, aRes] = await Promise.all([
         supabase.from('vendors').select('*').order('name'),
@@ -420,6 +468,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('accounts').select('*').eq('id', 'primary').maybeSingle()
       ]);
 
+      const queryError = [vRes, cRes, pccRes, scRes, mRes, iRes, pRes, cfRes, pcRes, aRes].find(result => result.error);
+      if (queryError?.error) {
+        throw new Error(queryError.error.message);
+      }
+
+      // Fetch Cashflow Green House tables separately — skip gracefully if tables don't exist yet
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let cfghCatData: any[] | null = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let cfghData: any[] | null = null;
+      try {
+        const [cfghCatRes, cfghRes] = await Promise.all([
+          supabase.from('cashflow_green_house_categories').select('*').order('name'),
+          supabase.from('cashflow_green_house').select('*'),
+        ]);
+        if (cfghCatRes.error || cfghRes.error) {
+          console.warn('Cashflow Green House tables not available yet, using localStorage fallback:', cfghCatRes.error?.message || cfghRes.error?.message);
+        } else {
+          cfghCatData = cfghCatRes.data;
+          cfghData = cfghRes.data;
+        }
+      } catch {
+        console.warn('Cashflow Green House tables not available yet, using localStorage fallback');
+      }
+
+      setDataLoadError(null);
       if (vRes.data) setVendors(vRes.data);
       if (cRes.data) setCategories(cRes.data);
       if (pccRes.data) setPettyCashCategories(pccRes.data);
@@ -478,6 +552,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           rowIndex: cf.row_index !== null && cf.row_index !== undefined ? Number(cf.row_index) : undefined
         })));
       }
+      if (cfghCatData) setCashflowGreenHouseCategories(cfghCatData);
+      if (cfghData) {
+        setCashflowGreenHouse(cfghData.map((cf) => ({
+          id: cf.id,
+          transactionDate: cf.transaction_date,
+          categoryId: cf.category_id || undefined,
+          description: cf.description || '',
+          debit: Number(cf.debit || 0),
+          credit: Number(cf.credit || 0),
+          createdAt: cf.created_at ? new Date(cf.created_at).getTime() : undefined,
+          rowIndex: cf.row_index !== null && cf.row_index !== undefined ? Number(cf.row_index) : undefined
+        })));
+      }
       if (pcRes.data) {
         setPettyCashes(pcRes.data.map((pc) => ({
           id: pc.id,
@@ -495,7 +582,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (err) {
       console.error("Error fetching from Supabase", err);
+      setDataLoadError(err instanceof Error ? err.message : 'Gagal memuat data dari Supabase.');
+    } finally {
+      setIsDataLoading(false);
     }
+  };
+
+  const retryDataLoad = () => {
+    void fetchSupabaseData();
   };
 
   // Load from LocalStorage or Supabase
@@ -536,7 +630,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const localInvoices = localStorage.getItem('cpms_invoices');
       const localPayments = localStorage.getItem('cpms_payments');
       const localCashflows = localStorage.getItem('cpms_cashflows');
+      const localCashflowGreenHouse = localStorage.getItem('cpms_cashflow_green_house');
+      const localCashflowGreenHouseCategories = localStorage.getItem('cpms_cashflow_green_house_categories');
       const localPettyCashes = localStorage.getItem('cpms_petty_cashes');
+
+      if (localCashflowGreenHouseCategories) setCashflowGreenHouseCategories(JSON.parse(localCashflowGreenHouseCategories));
+      else setCashflowGreenHouseCategories(initialCashflowGreenHouseCategories);
+
+      if (localCashflowGreenHouse) setCashflowGreenHouse(JSON.parse(localCashflowGreenHouse));
+      else setCashflowGreenHouse([]);
 
       if (localVendors) setVendors(JSON.parse(localVendors));
       else setVendors(initialVendors);
@@ -1517,6 +1619,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // PettyCash
+  const addCashflowGreenHouse = (cashflow: Omit<CashflowGreenHouse, 'id' | 'runningBalance'> & { rowIndex?: number }) => {
+    const newId = generateUUID();
+    const nextRowIndex = cashflow.rowIndex ?? (cashflowGreenHouse.length > 0 ? Math.max(...cashflowGreenHouse.map(item => item.rowIndex || 0)) + 1 : 1);
+    const newItem: CashflowGreenHouse = { ...cashflow, id: newId, createdAt: Date.now(), rowIndex: nextRowIndex };
+    const updated = [...cashflowGreenHouse, newItem];
+    setCashflowGreenHouse(updated);
+    save('cpms_cashflow_green_house', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload = { id: newId, transaction_date: cashflow.transactionDate, category_id: cashflow.categoryId || null, description: cashflow.description, debit: cashflow.debit, credit: cashflow.credit, row_index: nextRowIndex };
+      handleSupabaseWrite(() => supabase.from('cashflow_green_house').insert([payload]), { table: 'cashflow_green_house', method: 'insert', payload });
+    }
+    showToast('success', 'Transaksi Cashflow Green House berhasil ditambahkan');
+  };
+
+  const addCashflowsGreenHouse = (items: (Omit<CashflowGreenHouse, 'id' | 'runningBalance'> & { rowIndex?: number })[]) => {
+    const baseRowIndex = cashflowGreenHouse.length > 0 ? Math.max(...cashflowGreenHouse.map(item => item.rowIndex || 0)) : 0;
+    const newItems = items.map((item, index) => ({ ...item, id: generateUUID(), createdAt: Date.now() + index, rowIndex: item.rowIndex ?? baseRowIndex + index + 1 }));
+    const updated = [...cashflowGreenHouse, ...newItems];
+    setCashflowGreenHouse(updated);
+    save('cpms_cashflow_green_house', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payloads = newItems.map(item => ({ id: item.id, transaction_date: item.transactionDate, category_id: item.categoryId || null, description: item.description, debit: item.debit, credit: item.credit, row_index: item.rowIndex }));
+      handleSupabaseWrite(() => supabase.from('cashflow_green_house').insert(payloads), { table: 'cashflow_green_house', method: 'insert', payload: payloads });
+    }
+    showToast('success', `Berhasil mengimpor ${items.length} transaksi Cashflow Green House`);
+  };
+
+  const updateCashflowGreenHouse = (id: string, changes: Partial<CashflowGreenHouse>) => {
+    const updated = cashflowGreenHouse.map(item => item.id === id ? { ...item, ...changes } : item);
+    setCashflowGreenHouse(updated);
+    save('cpms_cashflow_green_house', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const payload: Record<string, string | number | null> = {};
+      if (changes.transactionDate !== undefined) payload.transaction_date = changes.transactionDate;
+      if (changes.categoryId !== undefined) payload.category_id = changes.categoryId || null;
+      if (changes.description !== undefined) payload.description = changes.description;
+      if (changes.debit !== undefined) payload.debit = changes.debit;
+      if (changes.credit !== undefined) payload.credit = changes.credit;
+      handleSupabaseWrite(() => supabase.from('cashflow_green_house').update(payload).eq('id', id), { table: 'cashflow_green_house', method: 'update', payload, match: { id } });
+    }
+    showToast('success', 'Transaksi Cashflow Green House berhasil diperbarui');
+  };
+
+  const deleteCashflowGreenHouse = (id: string) => {
+    const updated = cashflowGreenHouse.filter(item => item.id !== id);
+    setCashflowGreenHouse(updated);
+    save('cpms_cashflow_green_house', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house').delete().eq('id', id), { table: 'cashflow_green_house', method: 'delete', match: { id } });
+    showToast('success', 'Transaksi Cashflow Green House berhasil dihapus');
+  };
+
+  const deleteCashflowsGreenHouse = (ids: string[]) => {
+    const updated = cashflowGreenHouse.filter(item => !ids.includes(item.id));
+    setCashflowGreenHouse(updated);
+    save('cpms_cashflow_green_house', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house').delete().in('id', ids), { table: 'cashflow_green_house', method: 'delete', match: { id: ids } });
+    showToast('success', `${ids.length} transaksi Cashflow Green House berhasil dihapus`);
+  };
+
+  const addCashflowGreenHouseCategory = (category: Omit<CashflowGreenHouseCategory, 'id'>) => {
+    const newCategory = { ...category, id: `cfgh_cat_${generateUUID()}` };
+    const updated = [...cashflowGreenHouseCategories, newCategory];
+    setCashflowGreenHouseCategories(updated);
+    save('cpms_cashflow_green_house_categories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house_categories').insert([newCategory]), { table: 'cashflow_green_house_categories', method: 'insert', payload: newCategory });
+    showToast('success', 'Kategori Cashflow Green House berhasil ditambahkan');
+    return newCategory;
+  };
+
+  const updateCashflowGreenHouseCategory = (id: string, changes: Partial<CashflowGreenHouseCategory>) => {
+    const updated = cashflowGreenHouseCategories.map(category => category.id === id ? { ...category, ...changes } : category);
+    setCashflowGreenHouseCategories(updated);
+    save('cpms_cashflow_green_house_categories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house_categories').update(changes).eq('id', id), { table: 'cashflow_green_house_categories', method: 'update', payload: changes, match: { id } });
+  };
+
+  const deleteCashflowGreenHouseCategory = (id: string) => {
+    if (cashflowGreenHouse.some(item => item.categoryId === id)) {
+      showToast('error', 'Kategori masih digunakan transaksi Cashflow Green House.');
+      return false;
+    }
+    const updated = cashflowGreenHouseCategories.filter(category => category.id !== id);
+    setCashflowGreenHouseCategories(updated);
+    save('cpms_cashflow_green_house_categories', updated);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house_categories').delete().eq('id', id), { table: 'cashflow_green_house_categories', method: 'delete', match: { id } });
+    showToast('success', 'Kategori Cashflow Green House berhasil dihapus');
+    return true;
+  };
+
+  const deleteCashflowGreenHouseCategories = (ids: string[]) => {
+    const blockedIds = ids.filter(id => cashflowGreenHouse.some(item => item.categoryId === id));
+    const blocked = blockedIds.map(id => cashflowGreenHouseCategories.find(category => category.id === id)?.name || id);
+    const deleted = ids.filter(id => !blockedIds.includes(id));
+    if (deleted.length > 0) {
+      const updated = cashflowGreenHouseCategories.filter(category => !deleted.includes(category.id));
+      setCashflowGreenHouseCategories(updated);
+      save('cpms_cashflow_green_house_categories', updated);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL) handleSupabaseWrite(() => supabase.from('cashflow_green_house_categories').delete().in('id', deleted), { table: 'cashflow_green_house_categories', method: 'delete', match: { id: deleted } });
+    }
+    return { deleted, blocked };
+  };
+
   const addPettyCash = (pettyCash: Omit<PettyCash, 'id' | 'runningBalance'> & { rowIndex?: number }) => {
     const newId = generateUUID();
     const nextRowIndex = pettyCash.rowIndex !== undefined 
@@ -1868,11 +2072,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const { error } = await supabase.from('cashflows').upsert(payloads);
               if (error) throw new Error(`Cashflows: ${error.message}`);
             }
+            if (parsed.pettyCashCategories) {
+              const payloads = parsed.pettyCashCategories.map((c: PettyCashCategory) => ({
+                id: c.id,
+                name: c.name,
+                icon: c.icon,
+                color: c.color,
+                active: c.active
+              }));
+              const { error } = await supabase.from('petty_cash_categories').upsert(payloads);
+              if (error) throw new Error(`Petty Cash Categories: ${error.message}`);
+            }
             if (parsed.pettyCashes) {
               const payloads = parsed.pettyCashes.map((pc: PettyCash, idx: number) => ({
                 id: getOrGenerateUUID(pc.id),
                 transaction_date: pc.transactionDate,
                 transaction_type: pc.transactionType,
+                category_id: pc.categoryId || null,
                 subcategory_id: pc.subcategoryId || null,
                 vendor_id: pc.vendorId ? getOrGenerateUUID(pc.vendorId) : null,
                 description: pc.description,
@@ -1980,6 +2196,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCashflow,
         deleteCashflow,
         deleteCashflows,
+        cashflowGreenHouse,
+        cashflowGreenHouseCategories,
+        addCashflowGreenHouse,
+        addCashflowsGreenHouse,
+        updateCashflowGreenHouse,
+        deleteCashflowGreenHouse,
+        deleteCashflowsGreenHouse,
+        addCashflowGreenHouseCategory,
+        updateCashflowGreenHouseCategory,
+        deleteCashflowGreenHouseCategory,
+        deleteCashflowGreenHouseCategories,
         addPettyCash,
         addPettyCashes,
         updatePettyCash,
@@ -1992,6 +2219,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout,
         updateAccount,
         currentUser,
+        isDataLoading,
+        dataLoadError,
+        retryDataLoad,
         exportAllData,
         importAllData
       }}

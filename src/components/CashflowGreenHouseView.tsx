@@ -1,0 +1,319 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  AlertTriangle, ArrowUpDown, Edit2, FileSpreadsheet, FileText, Plus,
+  Search, Trash2, TrendingDown, TrendingUp, Upload, Wallet, X
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useApp, CashflowGreenHouse } from '@/context/AppContext';
+import { ConfirmDialog } from './ConfirmDialog';
+import { Pagination } from './Pagination';
+
+type TransactionType = 'Dana Masuk' | 'Pengeluaran';
+
+export const CashflowGreenHouseView: React.FC = () => {
+  const {
+    cashflowGreenHouse, cashflowGreenHouseCategories,
+    addCashflowGreenHouse, addCashflowsGreenHouse, updateCashflowGreenHouse,
+    deleteCashflowGreenHouse, deleteCashflowsGreenHouse,
+    addCashflowGreenHouseCategory, updateCashflowGreenHouseCategory,
+    deleteCashflowGreenHouseCategory, itemsPerPage, setItemsPerPage
+  } = useApp();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilterStart, setDateFilterStart] = useState('');
+  const [dateFilterEnd, setDateFilterEnd] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TransactionType | ''>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [selectedRow, setSelectedRow] = useState<CashflowGreenHouse | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [dialog, setDialog] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
+
+  const [transactionDate, setTransactionDate] = useState('');
+  const [transactionType, setTransactionType] = useState<TransactionType>('Pengeluaran');
+  const [categoryId, setCategoryId] = useState('');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState(0);
+  const [displayAmount, setDisplayAmount] = useState('');
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    setMounted(true);
+    const saved = localStorage.getItem('cashflow_green_house_sort_order');
+    if (saved === 'asc' || saved === 'desc') setSortDirection(saved);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = isModalOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isModalOpen]);
+
+  const formatRupiah = (value: number) => new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0
+  }).format(value);
+
+  const formatRupiahInput = (value: number) => value ? new Intl.NumberFormat('id-ID').format(value) : '';
+
+  const resetForm = () => {
+    setTransactionDate(new Date().toISOString().split('T')[0]);
+    setTransactionType('Pengeluaran');
+    setCategoryId(cashflowGreenHouseCategories[0]?.id || '');
+    setDescription(''); setAmount(0); setDisplayAmount(''); setFormError(''); setIsAddingCategory(false); setNewCategoryName('');
+  };
+
+  const openAdd = () => { resetForm(); setModalMode('add'); setSelectedRow(null); setIsModalOpen(true); };
+
+  const openEdit = (row: CashflowGreenHouse) => {
+    const type: TransactionType = row.debit > 0 ? 'Dana Masuk' : 'Pengeluaran';
+    const value = row.debit || row.credit;
+    setSelectedRow(row); setModalMode('edit'); setTransactionDate(row.transactionDate);
+    setTransactionType(type); setCategoryId(row.categoryId || ''); setDescription(row.description);
+    setAmount(value); setDisplayAmount(formatRupiahInput(value)); setFormError(''); setIsModalOpen(true);
+  };
+
+  const sortedRows = useMemo(() => [...cashflowGreenHouse].sort((a, b) => {
+    const dateResult = a.transactionDate.localeCompare(b.transactionDate);
+    return dateResult === 0 ? (a.rowIndex || 0) - (b.rowIndex || 0) : dateResult;
+  }), [cashflowGreenHouse]);
+
+  const rowsWithBalance = useMemo(() => {
+    let balance = 0;
+    return sortedRows.map(row => {
+      balance += row.debit - row.credit;
+      return { ...row, runningBalance: balance };
+    });
+  }, [sortedRows]);
+
+  const processedRows = useMemo(() => rowsWithBalance.filter(row => {
+    const categoryName = cashflowGreenHouseCategories.find(c => c.id === row.categoryId)?.name || '';
+    const text = `${row.description} ${categoryName}`.toLowerCase();
+    const rowType: TransactionType = row.debit > 0 ? 'Dana Masuk' : 'Pengeluaran';
+    return (!searchTerm || text.includes(searchTerm.toLowerCase())) &&
+      (!typeFilter || rowType === typeFilter) &&
+      (!categoryFilter || row.categoryId === categoryFilter) &&
+      (!dateFilterStart || row.transactionDate >= dateFilterStart) &&
+      (!dateFilterEnd || row.transactionDate <= dateFilterEnd);
+  }).sort((a, b) => {
+    const result = a.transactionDate.localeCompare(b.transactionDate);
+    return sortDirection === 'asc' ? result : -result;
+  }), [rowsWithBalance, searchTerm, typeFilter, categoryFilter, dateFilterStart, dateFilterEnd, sortDirection, cashflowGreenHouseCategories]);
+
+  const totalPages = Math.max(1, Math.ceil(processedRows.length / itemsPerPage));
+  const paginatedRows = processedRows.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totals = useMemo(() => cashflowGreenHouse.reduce((result, row) => ({
+    debit: result.debit + row.debit, credit: result.credit + row.credit
+  }), { debit: 0, credit: 0 }), [cashflowGreenHouse]);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!transactionDate) return setFormError('Tanggal transaksi wajib diisi.');
+    if (amount <= 0) return setFormError('Nominal harus lebih besar dari 0.');
+    if (!description.trim()) return setFormError('Keterangan wajib diisi.');
+    if (transactionType === 'Pengeluaran' && !categoryId) return setFormError('Kategori wajib dipilih.');
+
+    const data = {
+      transactionDate, categoryId: transactionType === 'Pengeluaran' ? (categoryId || undefined) : undefined,
+      description: description.trim(), debit: transactionType === 'Dana Masuk' ? amount : 0,
+      credit: transactionType === 'Pengeluaran' ? amount : 0
+    };
+    if (modalMode === 'edit' && selectedRow) updateCashflowGreenHouse(selectedRow.id, data);
+    else addCashflowGreenHouse(data);
+    setIsModalOpen(false); resetForm();
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => setDialog({ title, message, onConfirm });
+  const confirmDelete = (id: string) => showConfirm('Hapus Transaksi', 'Apakah Anda yakin ingin menghapus transaksi ini?', () => {
+    deleteCashflowGreenHouse(id); setDialog(null);
+  });
+
+  const exportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Laporan Cashflow Green House');
+    sheet.addRow(['LAPORAN CASHFLOW GREEN HOUSE']);
+    sheet.addRow([`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`]);
+    sheet.addRow([]);
+    sheet.addRow(['No', 'Tanggal', 'Jenis', 'Kategori', 'Keterangan', 'Debit', 'Kredit', 'Saldo Berjalan']);
+    processedRows.forEach((row, index) => sheet.addRow([
+      index + 1, new Date(row.transactionDate).toLocaleDateString('id-ID'), row.debit > 0 ? 'Dana Masuk' : 'Pengeluaran',
+      cashflowGreenHouseCategories.find(c => c.id === row.categoryId)?.name || '-', row.description,
+      row.debit || '-', row.credit || '-', row.runningBalance || 0
+    ]));
+    sheet.getRow(1).font = { bold: true, size: 16 };
+    sheet.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    [8, 14, 18, 24, 36, 18, 18, 20].forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), 'Laporan_Cashflow_Green_House.xlsx');
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
+    doc.setFontSize(16); doc.text('LAPORAN CASHFLOW GREEN HOUSE', 10, 15);
+    doc.setFontSize(10); doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 10, 21);
+    autoTable(doc, {
+      head: [['No', 'Tanggal', 'Jenis', 'Kategori', 'Keterangan', 'Debit', 'Kredit', 'Saldo Berjalan']],
+      body: processedRows.map((row, index) => [index + 1, new Date(row.transactionDate).toLocaleDateString('id-ID'), row.debit > 0 ? 'Dana Masuk' : 'Pengeluaran', cashflowGreenHouseCategories.find(c => c.id === row.categoryId)?.name || '-', row.description, row.debit ? formatRupiah(row.debit) : '-', row.credit ? formatRupiah(row.credit) : '-', formatRupiah(row.runningBalance || 0)]),
+      startY: 26, theme: 'striped', headStyles: { fillColor: [59, 130, 246], fontSize: 8 }, styles: { fontSize: 7.5 }
+    });
+    doc.save('Laporan_Cashflow_Green_House.pdf');
+  };
+
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const workbook = XLSX.read(reader.result, { type: 'array' });
+        const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(workbook.Sheets[workbook.SheetNames[0]]);
+        const get = (row: Record<string, string | number>, name: string) => {
+          const key = Object.keys(row).find(k => k.trim().toLowerCase() === name.toLowerCase());
+          return key ? row[key] : undefined;
+        };
+        const categoryCache = new Map(cashflowGreenHouseCategories.map(c => [c.name.trim().toLowerCase(), c.id]));
+        const imported: Array<Omit<CashflowGreenHouse, 'id' | 'runningBalance'>> = [];
+        let errors = 0;
+        rows.forEach((row, index) => {
+          const rawDate = get(row, 'Tanggal'); const rawType = String(get(row, 'Jenis') || '').toLowerCase();
+          const desc = String(get(row, 'Keterangan') || '').trim(); const rawAmount = get(row, 'Nominal');
+          let date = '';
+          if (typeof rawDate === 'number') date = new Date((rawDate - 25569) * 86400 * 1000).toISOString().split('T')[0];
+          else if (rawDate) { const parsed = new Date(String(rawDate)); if (!isNaN(parsed.getTime())) date = parsed.toISOString().split('T')[0]; }
+          const amountValue = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount || '').replace(/Rp|\s|\./gi, '').replace(',', '.'));
+          if (!date || !desc || !amountValue || amountValue <= 0 || (!rawType.includes('masuk') && !rawType.includes('keluar') && !rawType.includes('pengeluaran') && !rawType.includes('debit') && !rawType.includes('kredit'))) { errors++; return; }
+          const isIncome = rawType.includes('masuk') || rawType.includes('debit') || rawType.includes('income');
+          const rawCategory = String(get(row, 'Kategori') || '').trim();
+          let catId = '';
+          if (!isIncome && rawCategory && rawCategory !== '-') {
+            catId = categoryCache.get(rawCategory.toLowerCase()) || '';
+            if (!catId) { const category = addCashflowGreenHouseCategory({ name: rawCategory, icon: 'Tag', color: '#3b82f6', active: true }); catId = category.id; categoryCache.set(rawCategory.toLowerCase(), catId); }
+          }
+          imported.push({ transactionDate: date, categoryId: catId || undefined, description: desc, debit: isIncome ? amountValue : 0, credit: isIncome ? 0 : amountValue, rowIndex: index + 1 });
+        });
+        if (imported.length) addCashflowsGreenHouse(imported);
+        setDialog({ title: 'Import Selesai', message: `Berhasil mengimport ${imported.length} data. ${errors ? `${errors} baris diabaikan karena tidak valid.` : ''}` });
+      } catch { setDialog({ title: 'Import Gagal', message: 'Gagal membaca file Excel. Pastikan format file benar.' }); }
+      event.target.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const clearFilters = () => { setSearchTerm(''); setTypeFilter(''); setCategoryFilter(''); setDateFilterStart(''); setDateFilterEnd(''); setCurrentPage(1); };
+  const hasFilters = Boolean(searchTerm || typeFilter || categoryFilter || dateFilterStart || dateFilterEnd);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <SummaryCard label="Total Dana Masuk" value={formatRupiah(totals.debit)} color="green" icon={<TrendingUp className="w-5 h-5" />} />
+        <SummaryCard label="Total Pengeluaran" value={formatRupiah(totals.credit)} color="red" icon={<TrendingDown className="w-5 h-5" />} />
+        <SummaryCard label="Saldo Green House" value={formatRupiah(totals.debit - totals.credit)} color="blue" icon={<Wallet className="w-5 h-5" />} />
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="relative w-full lg:max-w-xs"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} placeholder="Cari deskripsi transaksi..." className="w-full pl-10 pr-4 h-10 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-slate-50/50" /></div>
+            <div className="flex flex-wrap items-center gap-3.5">
+              <input type="file" id="import-excel-green-house" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
+              <button type="button" onClick={exportExcel} className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2" title="Export Excel">
+                <FileSpreadsheet className="w-4 h-4 text-green-600" /><span>Excel</span>
+              </button>
+              <button type="button" onClick={exportPDF} className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2" title="Export PDF">
+                <FileText className="w-4 h-4 text-red-500" /><span>PDF</span>
+              </button>
+              <button type="button" onClick={() => document.getElementById('import-excel-green-house')?.click()} className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-600 text-sm font-semibold transition-all gap-2" title="Import Excel">
+                <Upload className="w-4 h-4 text-blue-600" /><span>Import</span>
+              </button>
+              <a href="/template-import-cashflow.xlsx" download className="inline-flex items-center justify-center h-10 px-4 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-500 hover:text-slate-700 text-sm font-semibold transition-all" title="Unduh Template Excel">Unduh Template</a>
+              <button type="button" onClick={openAdd} className="inline-flex items-center justify-center h-10 px-5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all gap-2 shadow-sm"><Plus className="w-4 h-4" />Input Transaksi</button>
+            </div>
+          </div>
+          <div className="flex flex-col md:flex-row md:items-center gap-4 pt-4 border-t border-slate-100">
+            <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value as TransactionType | ''); setCurrentPage(1); }} className="filter-input md:w-48"><option value="">Semua Jenis</option><option value="Dana Masuk">Dana Masuk</option><option value="Pengeluaran">Pengeluaran</option></select>
+            <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setCurrentPage(1); }} className="filter-input md:w-56"><option value="">Semua Kategori</option>{cashflowGreenHouseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            <div className="flex items-center gap-2 w-full md:w-auto"><input type="date" value={dateFilterStart} onChange={e => { setDateFilterStart(e.target.value); setCurrentPage(1); }} className="filter-input md:w-36" /><span className="text-slate-400 text-xs font-semibold">s/d</span><input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setCurrentPage(1); }} className="filter-input md:w-36" /></div>
+            {hasFilters && <button onClick={clearFilters} className="text-sm text-blue-600 font-semibold px-2 py-1 hover:bg-blue-50 rounded-lg">Reset Filter</button>}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto"><table className="w-full min-w-[1150px] text-left border-collapse"><thead><tr className="bg-slate-50/75 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            {isBulkMode && <th className="py-4 px-4 text-center w-12"><input type="checkbox" checked={paginatedRows.length > 0 && paginatedRows.every(row => selectedIds.includes(row.id))} onChange={e => setSelectedIds(e.target.checked ? paginatedRows.map(row => row.id) : [])} /></th>}
+            <th className="py-4 px-6 w-28"><button onClick={() => { const next = sortDirection === 'asc' ? 'desc' : 'asc'; setSortDirection(next); localStorage.setItem('cashflow_green_house_sort_order', next); }} className="flex items-center gap-1">Tanggal <ArrowUpDown className="w-3.5 h-3.5" /></button></th><th className="py-4 px-4 w-32">Jenis</th><th className="py-4 px-4 w-48">Kategori</th><th className="py-4 px-4 w-96">Keterangan</th><th className="py-4 px-4 text-right w-36">Debit</th><th className="py-4 px-4 text-right w-36">Kredit</th><th className="py-4 px-4 text-right w-40">Total Saldo</th><th className="py-4 px-6 text-right w-24">Edit</th>
+          </tr></thead><tbody className="divide-y divide-slate-100 text-sm">
+            {paginatedRows.map(row => <tr key={row.id} className={`${selectedIds.includes(row.id) ? 'bg-blue-50/30' : row.debit > 0 ? 'bg-green-50/40 hover:bg-green-50/60' : 'hover:bg-slate-50/50'} transition-colors`}>
+              {isBulkMode && <td className="py-4 px-4 text-center"><input type="checkbox" checked={selectedIds.includes(row.id)} onChange={e => setSelectedIds(e.target.checked ? [...selectedIds, row.id] : selectedIds.filter(id => id !== row.id))} /></td>}
+              <td className="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">{new Date(row.transactionDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td><td className="py-4 px-4"><span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${row.debit > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{row.debit > 0 ? 'Dana Masuk' : 'Pengeluaran'}</span></td><td className="py-4 px-4 text-slate-700 font-medium">{cashflowGreenHouseCategories.find(c => c.id === row.categoryId)?.name || '-'}</td><td className="py-4 px-4 text-slate-800 font-medium break-words max-w-[384px]">{row.description}</td><td className="py-4 px-4 text-right font-bold text-green-600 whitespace-nowrap">{row.debit ? formatRupiah(row.debit) : '-'}</td><td className="py-4 px-4 text-right font-bold text-red-600 whitespace-nowrap">{row.credit ? formatRupiah(row.credit) : '-'}</td><td className="py-4 px-4 text-right font-bold text-slate-700 whitespace-nowrap">{formatRupiah(row.runningBalance || 0)}</td><td className="py-4 px-6 text-right"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(row)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-4 h-4" /></button><button onClick={() => confirmDelete(row.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></div></td>
+            </tr>)}
+            {processedRows.length === 0 && <tr><td colSpan={isBulkMode ? 9 : 8} className="py-16 text-center"><Search className="w-6 h-6 text-slate-300 mx-auto mb-3" /><p className="text-sm font-bold text-slate-700">{cashflowGreenHouse.length === 0 ? 'Belum ada transaksi' : 'Tidak ditemukan data transaksi'}</p><p className="text-xs text-slate-400">Silakan periksa filter atau tambahkan transaksi.</p></td></tr>}
+          </tbody></table></div>
+          <div className="border-t border-slate-100 bg-slate-50/30 p-4"><Pagination currentPage={Math.min(currentPage, totalPages)} totalPages={totalPages} totalItems={processedRows.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} /><button onClick={() => { if (isBulkMode && selectedIds.length) showConfirm('Hapus Transaksi', `Hapus ${selectedIds.length} transaksi terpilih?`, () => { deleteCashflowsGreenHouse(selectedIds); setSelectedIds([]); setIsBulkMode(false); setDialog(null); }); else { setIsBulkMode(!isBulkMode); setSelectedIds([]); } }} className="inline-flex items-center justify-center px-4 py-2 border rounded-xl text-xs font-semibold gap-1.5 border-slate-200 bg-white text-slate-600"><Trash2 className="w-3.5 h-3.5" />{isBulkMode ? (selectedIds.length ? `Hapus ${selectedIds.length} Terpilih` : 'Batal Pilih') : 'Pilih Banyak'}</button></div>
+        </div>
+
+        <CategorySummary categories={cashflowGreenHouseCategories} rows={cashflowGreenHouse} formatRupiah={formatRupiah} managing={isManagingCategories} setManaging={setIsManagingCategories} newName={newCategoryName} setNewName={setNewCategoryName} editingId={editingCategoryId} setEditingId={setEditingCategoryId} editingName={editingCategoryName} setEditingName={setEditingCategoryName} addCategory={addCashflowGreenHouseCategory} updateCategory={updateCashflowGreenHouseCategory} deleteCategory={(id: string) => showConfirm('Hapus Kategori', 'Hapus kategori ini?', () => { deleteCashflowGreenHouseCategory(id); setDialog(null); })} />
+      </div>
+
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isModalOpen && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ type: 'spring', damping: 25, stiffness: 350 }} className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden z-10">
+                <form onSubmit={submit} className="flex flex-col flex-1 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+                    <h3 className="text-base font-bold text-slate-800">{modalMode === 'add' ? 'Input Transaksi Green House' : 'Edit Transaksi Green House'}</h3>
+                    <button type="button" onClick={() => setIsModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ scrollbarGutter: 'stable' }}>
+                    {formError && <div className="p-3 bg-red-50 text-red-700 text-xs font-semibold rounded-xl border border-red-100 flex items-center gap-2"><AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />{formError}</div>}
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tanggal Transaksi</label><input type="date" value={transactionDate} onChange={e => setTransactionDate(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div>
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Jenis Transaksi</label><select value={transactionType} onChange={e => { const value = e.target.value as TransactionType; setTransactionType(value); if (value === 'Dana Masuk') setCategoryId(''); }} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"><option value="Dana Masuk">Dana Masuk (Income)</option><option value="Pengeluaran">Pengeluaran (Expense)</option></select></div>
+                    {transactionType === 'Dana Masuk' ? (
+                      <div className="space-y-4"><div className="space-y-1"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Keterangan</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Keterangan pemasukan..." className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div></div>
+                    ) : (
+                      <div className="space-y-4 p-4 border border-slate-100 rounded-2xl bg-slate-50/40">
+                        <div className="space-y-1"><div className="flex justify-between items-center"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Kategori</label><button type="button" onClick={() => { setIsAddingCategory(!isAddingCategory); setNewCategoryName(''); }} className="text-xs text-blue-600 font-bold hover:underline">{isAddingCategory ? 'Batal' : '+ Kategori Baru'}</button></div>
+                          {isAddingCategory ? <div className="flex gap-2"><input type="text" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="Nama Kategori Baru..." className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20" /><button type="button" onClick={() => { if (!newCategoryName.trim()) return; const created = addCashflowGreenHouseCategory({ name: newCategoryName, icon: 'Tag', color: '#3b82f6', active: true }); setCategoryId(created.id); setIsAddingCategory(false); setNewCategoryName(''); }} className="px-3 py-1.5 bg-blue-600 text-white font-semibold text-xs rounded-xl hover:bg-blue-700">Simpan</button></div> : <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white">{cashflowGreenHouseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+                        </div>
+                        <div className="space-y-1"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Keterangan</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Keterangan pengeluaran..." className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" /></div>
+                      </div>
+                    )}
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Nominal (Rupiah)</label><div className="relative flex items-center"><span className="absolute left-3 text-sm font-bold text-slate-500">Rp</span><input type="text" inputMode="decimal" pattern="[0-9.]*" value={displayAmount} onChange={e => { const clean = e.target.value.replace(/[^0-9]/g, ''); const value = clean ? parseInt(clean, 10) : 0; setAmount(value); setDisplayAmount(formatRupiahInput(value)); }} placeholder="0" className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold" /></div></div>
+                  </div>
+                  <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2 bg-white flex-shrink-0"><button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors">Batal</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-500/10 transition-colors">Simpan Transaksi</button></div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+      <ConfirmDialog isOpen={Boolean(dialog)} title={dialog?.title || ''} message={dialog?.message || ''} onConfirm={dialog?.onConfirm} onClose={() => setDialog(null)} />
+    </div>
+  );
+};
+
+const SummaryCard = ({ label, value, color, icon }: { label: string; value: string; color: 'green' | 'red' | 'blue'; icon: React.ReactNode }) => { const styles = { green: { text: 'text-green-600', bg: 'bg-green-50' }, red: { text: 'text-red-600', bg: 'bg-red-50' }, blue: { text: 'text-blue-600', bg: 'bg-blue-50' } }[color]; return <div className="p-5 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between"><div><span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">{label}</span><h3 className={`text-xl font-bold ${styles.text} mt-1`}>{value}</h3></div><div className={`p-3 ${styles.bg} rounded-xl ${styles.text}`}>{icon}</div></div>; };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CategorySummary = ({ categories, rows, formatRupiah, managing, setManaging, newName, setNewName, editingId, setEditingId, editingName, setEditingName, addCategory, updateCategory, deleteCategory }: any) => <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4"><div className="flex justify-between items-center"><div><h3 className="text-base font-bold text-slate-800">Rekap Cashflow Green House</h3><p className="text-[11px] text-slate-400 font-semibold">Tabel rekapitulasi kategori</p></div><button onClick={() => setManaging(!managing)} className="text-xs text-blue-600 font-bold hover:underline">{managing ? 'Selesai' : 'Kelola'}</button></div>{managing ? <div className="space-y-3"><div className="flex gap-2"><input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nama kategori..." className="form-input flex-1" /><button onClick={() => { if (newName.trim()) { addCategory({ name: newName.trim(), icon: 'Tag', color: '#3b82f6', active: true }); setNewName(''); } }} className="px-3 bg-blue-600 text-white rounded-xl text-xs font-semibold">Tambah</button></div>{categories.map((category: any) => <div key={category.id} className="flex items-center justify-between border-b border-slate-100 py-2 text-xs">{editingId === category.id ? <><input value={editingName} onChange={e => setEditingName(e.target.value)} className="form-input flex-1 mr-2" /><button onClick={() => { if (editingName.trim()) updateCategory(category.id, { name: editingName.trim() }); setEditingId(null); }} className="text-green-600 font-bold">Simpan</button></> : <><span className="font-semibold">{category.name}</span><span><button onClick={() => { setEditingId(category.id); setEditingName(category.name); }} className="text-blue-600 mr-2">Edit</button><button onClick={() => deleteCategory(category.id)} className="text-red-600">Hapus</button></span></>}</div>)}</div> : <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden text-xs">{categories.map((category: any) => <div key={category.id} className="p-3 flex justify-between"><span className="font-semibold text-slate-600">{category.name}</span><span className="font-bold text-slate-700">{formatRupiah(rows.filter((row: any) => row.categoryId === category.id).reduce((sum: number, row: any) => sum + row.credit, 0))}</span></div>)}<div className="p-3 bg-slate-50/70 flex justify-between font-bold"><span>Grand Total</span><span className="text-blue-600">{formatRupiah(rows.reduce((sum: number, row: any) => sum + row.credit, 0))}</span></div></div>}</div>;
+
+const classStyles = <style jsx global>{`.action-button { display:inline-flex; align-items:center; justify-content:center; height:2.5rem; padding:0 1rem; border:1px solid rgb(226 232 240); border-radius:.75rem; color:rgb(71 85 105); font-size:.875rem; font-weight:600; gap:.5rem; } .action-button:hover { background:rgb(248 250 252); } .filter-input,.form-input { width:100%; padding:.625rem .875rem; border:1px solid rgb(226 232 240); border-radius:.75rem; font-size:.875rem; outline:none; } .filter-input:focus,.form-input:focus { border-color:rgb(59 130 246); box-shadow:0 0 0 2px rgb(59 130 246 / .2); } .field-label { display:block; color:rgb(71 85 105); font-size:.75rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }`}</style>;
+void classStyles;

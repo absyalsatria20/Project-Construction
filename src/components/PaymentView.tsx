@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp, Invoice } from '@/context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,6 +37,7 @@ export const PaymentView: React.FC = () => {
     updateInvoice, 
     deleteInvoice,
     addPayment,
+    updatePayment,
     deletePayment,
     itemsPerPage,
     setItemsPerPage,
@@ -87,6 +88,11 @@ export const PaymentView: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const invoiceSubmitLock = useRef(false);
+  const paymentSubmitLock = useRef(false);
 
   useEffect(() => {
     if (isInvoiceModalOpen || isPaymentModalOpen) {
@@ -178,9 +184,32 @@ export const PaymentView: React.FC = () => {
     setDisplayPaymentAmount('');
     setPaymentNote('');
     setPaymentError('');
+    setEditingPaymentId(null);
   };
 
+  const handleOpenEditPayment = (paymentId: string) => {
+    paymentSubmitLock.current = false;
+    setIsSubmittingPayment(false);
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    setSelectedInvoice(invoices.find(invoice => invoice.id === payment.invoiceId) || null);
+    setEditingPaymentId(payment.id);
+    setPaymentDate(payment.paymentDate);
+    setPaymentAmount(payment.amount);
+    setDisplayPaymentAmount(formatRupiahInput(payment.amount));
+    setPaymentNote(payment.paymentNote === '-' ? '' : payment.paymentNote);
+    setPaymentError('');
+    setIsPaymentModalOpen(true);
+  };
+
+  const getPaymentTotalExcluding = (paymentId: string) => payments
+    .filter(p => p.invoiceId === selectedInvoice?.id && p.id !== paymentId)
+    .reduce((sum, p) => sum + p.amount, 0);
+
   const handleOpenAddInvoice = React.useCallback(() => {
+    invoiceSubmitLock.current = false;
+    setIsSubmittingInvoice(false);
     resetInvoiceForm();
     if (vendors.length > 0) setVendorId(vendors[0].id);
     setInvoiceModalMode('add');
@@ -195,6 +224,8 @@ export const PaymentView: React.FC = () => {
   }, [openInvoiceModal, vendors, handleOpenAddInvoice, setOpenInvoiceModal]);
 
   const handleOpenEditInvoice = (invoice: Invoice) => {
+    invoiceSubmitLock.current = false;
+    setIsSubmittingInvoice(false);
     setSelectedInvoice(invoice);
     setVendorId(invoice.vendorId);
     setInvoiceNumber(invoice.invoiceNumber);
@@ -222,6 +253,8 @@ export const PaymentView: React.FC = () => {
   };
 
   const handleOpenAddPayment = (invoice: Invoice) => {
+    paymentSubmitLock.current = false;
+    setIsSubmittingPayment(false);
     setSelectedInvoice(invoice);
     resetPaymentForm();
     // Default payment date to today
@@ -240,16 +273,39 @@ export const PaymentView: React.FC = () => {
 
   const handleInvoiceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (invoiceSubmitLock.current) return;
+    invoiceSubmitLock.current = true;
+    setIsSubmittingInvoice(true);
+
     if (!vendorId) {
+      invoiceSubmitLock.current = false;
+      setIsSubmittingInvoice(false);
       setInvoiceError('Vendor wajib dipilih.');
       return;
     }
     if (!invoiceDate) {
+      invoiceSubmitLock.current = false;
+      setIsSubmittingInvoice(false);
       setInvoiceError('Tanggal Invoice wajib diisi.');
       return;
     }
     if (totalInvoice <= 0) {
+      invoiceSubmitLock.current = false;
+      setIsSubmittingInvoice(false);
       setInvoiceError('Total Invoice harus lebih besar dari 0.');
+      return;
+    }
+
+    const normalizedInvoiceNumber = invoiceNumber.trim().toLowerCase();
+    const duplicateInvoice = invoices.some(invoice =>
+      invoice.id !== selectedInvoice?.id &&
+      invoice.invoiceNumber.trim().toLowerCase() === normalizedInvoiceNumber &&
+      normalizedInvoiceNumber !== '-'
+    );
+    if (duplicateInvoice) {
+      invoiceSubmitLock.current = false;
+      setIsSubmittingInvoice(false);
+      setInvoiceError('Nomor invoice sudah digunakan.');
       return;
     }
 
@@ -274,33 +330,51 @@ export const PaymentView: React.FC = () => {
 
   const handlePaymentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInvoice) return;
+    if (paymentSubmitLock.current) return;
+    paymentSubmitLock.current = true;
+    setIsSubmittingPayment(true);
+
+    if (!selectedInvoice) {
+      paymentSubmitLock.current = false;
+      setIsSubmittingPayment(false);
+      return;
+    }
 
     if (!paymentDate) {
+      paymentSubmitLock.current = false;
+      setIsSubmittingPayment(false);
       setPaymentError('Tanggal Pembayaran wajib diisi.');
       return;
     }
     if (paymentAmount <= 0) {
+      paymentSubmitLock.current = false;
+      setIsSubmittingPayment(false);
       setPaymentError('Nominal pembayaran harus lebih besar dari 0.');
       return;
     }
 
-    const invoicePayments = payments
-      .filter(p => p.invoiceId === selectedInvoice.id)
-      .reduce((sum, p) => sum + p.amount, 0);
+    const invoicePayments = getPaymentTotalExcluding(editingPaymentId || '');
     const remaining = selectedInvoice.totalInvoice - invoicePayments;
 
     if (paymentAmount > remaining) {
+      paymentSubmitLock.current = false;
+      setIsSubmittingPayment(false);
       setPaymentError(`Nominal pembayaran melebihi sisa tagihan (${formatRupiah(remaining)}).`);
       return;
     }
 
-    addPayment({
+    const paymentPayload = {
       invoiceId: selectedInvoice.id,
       paymentDate,
       amount: paymentAmount,
       paymentNote: paymentNote.trim() || '-'
-    });
+    };
+
+    if (editingPaymentId) {
+      updatePayment(editingPaymentId, paymentPayload);
+    } else {
+      addPayment(paymentPayload);
+    }
 
     setIsPaymentModalOpen(false);
     
@@ -310,6 +384,8 @@ export const PaymentView: React.FC = () => {
     } else {
       resetPaymentForm();
     }
+    paymentSubmitLock.current = false;
+    setIsSubmittingPayment(false);
   };
 
   const handleDeletePayment = (id: string) => {
@@ -816,8 +892,12 @@ export const PaymentView: React.FC = () => {
                         <Search className="w-6 h-6 text-slate-300" />
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-sm font-bold text-slate-700">Tidak ditemukan data invoice</p>
-                        <p className="text-xs text-slate-400">Silakan periksa filter atau tambahkan data baru</p>
+                        <p className="text-sm font-bold text-slate-700">
+                                                  {invoices.length === 0 ? 'Belum ada invoice' : 'Tidak ditemukan data invoice'}
+                                                </p>
+                                                <p className="text-xs text-slate-400">
+                                                  {invoices.length === 0 ? 'Tambahkan invoice pertama untuk mulai mencatat tagihan.' : 'Silakan periksa filter atau reset pencarian.'}
+                                                </p>
                       </div>
                     </div>
                   </td>
@@ -1141,8 +1221,17 @@ export const PaymentView: React.FC = () => {
                                   <span className="font-bold text-slate-700 text-xs">{formatRupiah(p.amount)}</span>
                                   <button
                                     type="button"
+                                    onClick={() => handleOpenEditPayment(p.id)}
+                                    className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-1 rounded-lg transition-colors"
+                                    title="Edit pembayaran"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => handleDeletePayment(p.id)}
                                     className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition-colors"
+                                    title="Hapus pembayaran"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -1308,9 +1397,10 @@ export const PaymentView: React.FC = () => {
                     {invoiceModalMode !== 'view' && (
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-500/10 transition-colors"
+                        disabled={isSubmittingInvoice}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm shadow-blue-500/10 transition-colors"
                       >
-                        Simpan
+                        {isSubmittingInvoice ? 'Menyimpan...' : 'Simpan'}
                       </button>
                     )}
                   </div>
@@ -1344,7 +1434,7 @@ export const PaymentView: React.FC = () => {
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-slate-800">Tambah Pembayaran</h3>
+                    <h3 className="text-base font-bold text-slate-800">{editingPaymentId ? 'Edit Pembayaran' : 'Tambah Pembayaran'}</h3>
                     <p className="text-xs text-slate-400 font-semibold">{selectedInvoice.invoiceNumber}</p>
                   </div>
                   <button 
@@ -1439,9 +1529,10 @@ export const PaymentView: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm shadow-blue-500/10 transition-colors"
+                      disabled={isSubmittingPayment}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm shadow-blue-500/10 transition-colors"
                     >
-                      Simpan Pembayaran
+                      {isSubmittingPayment ? 'Menyimpan...' : 'Simpan Pembayaran'}
                     </button>
                   </div>
                 </form>

@@ -8,7 +8,8 @@ import {
   Hammer, 
   CreditCard, 
   Landmark, 
-  Menu, 
+  Building2,
+  Menu,
   X,
   LogOut,
   Wallet
@@ -48,6 +49,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ activeTab, setActiveTab,
     { id: 'material', label: 'Monitoring Material', icon: Hammer },
     { id: 'payment', label: 'Rekap Pembayaran', icon: CreditCard },
     { id: 'cashflow', label: 'Cashflow', icon: Landmark },
+    { id: 'cashflow-green-house', label: 'Cashflow Green House', icon: Building2 },
     { id: 'pettycash', label: 'Petty Cash', icon: Wallet },
   ];
 
