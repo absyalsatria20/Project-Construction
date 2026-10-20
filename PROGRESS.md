@@ -42,3 +42,34 @@
 - Menyamakan tata letak dan bentuk modal input Green House dengan modal input tab Cashflow lama, termasuk class input, label, blok Pengeluaran, animasi, spacing, dan tombol.
 - File: `src/components/CashflowGreenHouseView.tsx`.
 - Verifikasi: `npm run typecheck`, `npm run lint`, dan `npm run build` berhasil.
+
+## 2026-10-20
+- Memperbaiki urutan ledger dan saldo berjalan pada tab `Cashflow Green House`.
+- Saldo kini dihitung memakai urutan canonical `transactionDate`, `rowIndex`, lalu `id`.
+- Urutan tampilan ASC/DESC memakai comparator yang sama; saldo tetap melekat pada transaksi yang benar setelah transaksi tanggal lama ditambahkan atau tanggal transaksi diedit.
+- Tab Cashflow lama tidak diubah.
+- File: `src/components/CashflowGreenHouseView.tsx`.
+- Verifikasi: `npm run typecheck`, `npm run lint`, `npm run build`, dan `git diff --check` berhasil.
+- Menyesuaikan UI tabel rekap kategori Green House dengan UI Cashflow lama saat mode `Kelola`.
+- Menambahkan tombol export rekap Excel/PDF, mode tambah/edit kategori, tombol Batal, dialog hapus, dan layout responsive untuk mobile.
+- Menyesuaikan baris rekap agar nama kategori panjang dan nominal tidak bertabrakan pada layar kecil.
+- Cashflow lama tidak diubah.
+- File: `src/components/CashflowGreenHouseView.tsx`.
+- Verifikasi: `npm run typecheck`, `npm run lint`, `npm run build`, dan `git diff --check` berhasil.
+- Revisi UI kelola kategori mengikuti Cashflow lama: tambah kategori, pilih banyak, pilih semua, hapus terpilih, edit inline, simpan, batal, dan ikon edit/hapus.
+- Verifikasi revisi: `npm run typecheck`, `npm run lint`, `npm run build`, dan `git diff --check` berhasil.
+- Menyamakan alur hapus kategori dengan Cashflow lama: dialog konfirmasi, hapus banyak, hasil kategori terblokir, dan ikon aksi edit/hapus.
+- Mengambil referensi stabil Petty Cash untuk bulk action bar: checkbox kategori tetap satu baris dengan nama, popup aksi `Batal`/`Hapus Banyak`, dan popup aksi sama untuk tabel transaksi Green House.
+- Input tambah kategori memakai placeholder `Nama kategori` dan tombol `Tambah` tetap di sebelah input pada mobile.
+- Memperbaiki style kotak input `Nama kategori` pada Green House mengikuti Petty Cash, tanpa mengubah Petty Cash.
+- Menghapus teks `Hapus Terpilih` dari kontrol kelola kategori; penghapusan tetap melalui popup aksi dan dialog konfirmasi.
+- Memperbaiki filter jenis, kategori, dan rentang tanggal Green House agar memakai input berkotak, border, radius, focus state, dan ukuran konsisten dengan Petty Cash.
+- Menukar style kotak pencarian deskripsi transaksi dan input `Nama kategori` pada Green House sesuai permintaan, tanpa mengubah Petty Cash.
+- Menyamakan ukuran, spacing, border, typography, tombol, dan transisi warna input tambah kategori Green House dengan blok tambah kategori Petty Cash.
+- Menstabilkan tabel Cashflow Green House mengikuti struktur tabel Petty Cash: lebar minimum konsisten `1100px`, header sticky, backdrop blur, dan wrapper overflow horizontal yang sama.
+- Petty Cash tidak diubah.
+- Memperbaiki posisi pagination Green House dengan menambahkan parent `relative`, sama seperti Petty Cash, agar posisi page tidak bergeser saat pindah tab.
+- Menyamakan kotak pencarian deskripsi transaksi Green House dengan Petty Cash: ukuran teks, warna latar, border focus, dan transition.
+- Menyamakan mode edit kategori Green House dengan Petty Cash: layout satu baris, input berkotak, tombol `Simpan` dan `Batal` tetap sejajar pada mobile.
+- Petty Cash tidak diubah.
+- Verifikasi: `npm run typecheck`, `npm run lint`, dan `git diff --check` berhasil.
